@@ -1,0 +1,2583 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dachtyla v1.0 - Calculadora Gráfica</title>
+    
+    <!-- Math.js para validación, derivadas y evaluación -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.8.0/math.js"></script>
+    
+    <!-- MathLive para el Editor Matemático Visual -->
+    <script defer src="https://unpkg.com/mathlive"></script>
+
+    <!-- MediaPipe para Reconocimiento de Manos -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <style>
+        :root {
+            --bg-main: #ffffff;
+            --bg-panel: #f3f4f6;
+            --bg-keyboard: #f8f9fa;
+            --border-color: #e5e7eb;
+            --text-main: #1f2937;
+            --text-muted: #6b7280;
+            --primary-gradient: linear-gradient(135deg, #8b5cf6, #ec4899);
+            --danger-bg: #fee2e2;
+            --danger-text: #dc2626;
+            --danger-border: #fca5a5;
+            --warning-bg: #fef3c7;
+            --warning-text: #b45309;
+            --warning-border: #fcd34d;
+            --success-bg: #10b981;
+            --success-text: #059669;
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: var(--font-family); }
+
+        body { background-color: var(--bg-main); color: var(--text-main); width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; overflow: hidden; }
+        .app-container { width: 100%; height: 100%; display: flex; flex-direction: column; background-color: var(--bg-main); }
+
+        /* HEADER */
+        header { display: flex; justify-content: space-between; align-items: center; padding: 15px 25px; border-bottom: 1px solid var(--border-color); }
+        .logo-container { display: flex; align-items: center; gap: 10px; }
+        .logo-bars { display: flex; align-items: flex-end; gap: 3px; height: 24px; }
+        .bar { width: 6px; border-radius: 3px; }
+        .bar:nth-child(1) { height: 12px; background-color: #60a5fa; }
+        .bar:nth-child(2) { height: 20px; background-color: #a78bfa; }
+        .bar:nth-child(3) { height: 24px; background-color: #8b5cf6; }
+        .bar:nth-child(4) { height: 16px; background-color: #ec4899; }
+        .logo-text { font-size: 24px; font-weight: 800; letter-spacing: -0.5px; }
+        .logo-version { font-size: 12px; color: var(--text-muted); margin-left: 5px; font-weight: normal; }
+        .header-status-container { display: flex; align-items: center; gap: 20px; font-size: 14px; font-weight: 500; }
+        .status-badge { display: flex; align-items: center; gap: 8px; background-color: var(--danger-bg); color: var(--danger-text); padding: 6px 12px; border-radius: 20px; font-size: 13px; transition: all 0.3s ease; }
+        .status-dot { width: 8px; height: 8px; background-color: var(--danger-text); border-radius: 50%; transition: background-color 0.3s ease; }
+        
+        .status-badge.active { background-color: #d1fae5; color: var(--success-text); }
+        .status-badge.active .status-dot { background-color: var(--success-bg); }
+
+        /* MAIN LAYOUT */
+        main { display: flex; flex: 1; overflow: hidden; background-color: var(--bg-main); }
+
+        /* GRAPH AREA - FONDO NEGRO */
+        .graph-area {
+            flex: 1; position: relative; background-color: #050508; margin: 15px; border: 1px solid #1e1e2e; border-radius: 12px; overflow: hidden; 
+            cursor: grab; transition: background-color 0.3s ease;
+        }
+        .graph-area.dark-mode { background-color: #000000; }
+        .graph-area:active { cursor: grabbing; }
+
+        #particle-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; }
+        
+        /* TEXTO FLOTANTE DE LA INTERFAZ 2 */
+        .ui2-floating-label { 
+            position: absolute; top: 20px; left: 20px; background-color: rgba(255,255,255,0.95); padding: 12px 18px; 
+            border-radius: 8px; display: none; z-index: 3; box-shadow: 0 4px 15px rgba(0,0,0,0.4); border: 1px solid var(--border-color);
+            min-width: 250px; pointer-events: none;
+        }
+        .ui2-floating-row { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; display: flex; justify-content: space-between; gap: 10px; }
+        .ui2-floating-row span { font-weight: 600; color: var(--text-main); }
+        .ui2-floating-divider { height: 1px; background: var(--border-color); margin: 6px 0; }
+        .ui2-floating-result { font-size: 14px; font-weight: bold; color: #8b5cf6; margin-top: 4px; }
+
+        /* SIDEBAR CONTAINER */
+        .sidebar-wrapper { width: 390px; border-left: 1px solid var(--border-color); background-color: var(--bg-main); position: relative; overflow: hidden; }
+        .sidebar-view { position: absolute; top: 0; left: 0; width: 100%; height: 100%; padding: 18px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; transition: transform 0.4s ease, opacity 0.4s ease; }
+        .view-hidden-left { transform: translateX(-100%); opacity: 0; pointer-events: none; }
+        .view-hidden-right { transform: translateX(100%); opacity: 0; pointer-events: none; }
+        .view-active { transform: translateX(0); opacity: 1; pointer-events: auto; }
+
+        .panel { background-color: var(--bg-panel); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; }
+        .panel h3 { font-size: 14px; font-weight: 600; margin-bottom: 15px; color: var(--text-main); }
+        .btn-gradient { width: 100%; padding: 12px; border: none; border-radius: 8px; background: var(--primary-gradient); color: white; font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity 0.3s, transform 0.1s; }
+        .btn-gradient:active { transform: scale(0.98); }
+        .btn-gradient.disabled-temp { opacity: 0.6; cursor: not-allowed; }
+
+        /* INTERFAZ 1 */
+        .input-group { margin-bottom: 15px; }
+        .input-group:last-child { margin-bottom: 0; }
+        .input-label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 5px; }
+        input[type="text"], input[type="number"] { width: 100%; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px; outline: none; transition: border-color 0.2s; background-color: white; }
+        input[type="text"]:focus, input[type="number"]:focus { border-color: #8b5cf6; }
+        .expression-container { position: relative; display: flex; align-items: center; background-color: white; border: 1px solid var(--border-color); border-radius: 8px; padding: 0 10px; gap: 5px; }
+        .expression-container:focus-within { border-color: #8b5cf6; }
+        .fx-label { font-size: 14px; color: var(--text-muted); user-select: none; }
+        math-field { font-size: 18px; width: 100%; padding: 10px 0; background: transparent; border: none; outline: none; flex: 1; min-width: 0; }
+        math-field::part(virtual-keyboard-toggle) { display: none !important; }
+        math-field::part(menu-toggle) { display: none !important; }
+        .icon-btn { cursor: pointer; color: var(--text-muted); padding: 5px; border-radius: 4px; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
+        .icon-btn:hover { color: #8b5cf6; background-color: #f3f4f6; }
+        .icon-btn.active { color: #8b5cf6; background-color: #e0e7ff; }
+        .saved-functions-title { font-size: 14px; font-weight: 600; margin-top: 10px; margin-bottom: 10px; }
+        .saved-slot { display: flex; align-items: center; justify-content: space-between; background-color: var(--bg-panel); padding: 10px 15px; border-radius: 8px; margin-bottom: 8px; font-size: 13px; }
+        .slot-left { display: flex; align-items: center; gap: 10px; }
+        .slot-num { font-weight: bold; color: var(--text-muted); width: 15px;}
+        .slot-dot { width: 8px; height: 8px; background-color: #d1d5db; border-radius: 50%; }
+        .slot-dot.active { background-color: #8b5cf6; }
+        .slot-name { color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px;}
+        .slot-name.active { color: var(--text-main); font-weight: 500;}
+        .slot-expr-container { display: flex; align-items: center; gap: 10px; }
+        .slot-expr { color: var(--text-muted); pointer-events: none;}
+        .slot-expr math-field { padding: 0; font-size: 14px; background: transparent; }
+        .trash-icon { color: var(--text-muted); cursor: pointer; transition: color 0.2s; padding: 2px; border-radius: 4px; }
+        .trash-icon:hover { color: var(--danger-text); background-color: #fca5a533; }
+
+        /* INTERFAZ 2 */
+        .ui2-info-text { font-size: 13px; color: var(--text-main); font-weight: 600; margin-bottom: 6px; display: block;}
+        .ui2-math-display { font-size: 16px; color: var(--text-muted); background: white; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border-color); pointer-events: none; margin-bottom: 8px; }
+        .ui2-domain-range { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; background: white; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border-color); }
+        .ui2-domain-range span { font-weight: 600; color: var(--text-main); }
+        .ui2-gesture-info { font-size: 13px; color: var(--text-main); background: white; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); min-height: 45px; margin-bottom: 8px; }
+        
+        /* Mensajes de error matemático debajo del campo de entrada */
+        .eval-error-box {
+            margin-top: 7px;
+            padding: 7px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            line-height: 1.35;
+            display: none;
+            align-items: flex-start;
+            gap: 6px;
+        }
+        .eval-error-box.visible { display: flex; }
+        .eval-error-box.error-undefined,
+        .eval-error-box.error-eval {
+            background-color: var(--danger-bg);
+            color: var(--danger-text);
+            border: 1px solid var(--danger-border);
+        }
+        .eval-error-box.error-indeterminate {
+            background-color: var(--warning-bg);
+            color: var(--warning-text);
+            border: 1px solid var(--warning-border);
+        }
+        .tangent-error-box {
+            margin-top: 6px;
+            padding: 7px 10px;
+            border-radius: 6px;
+            font-size: 11.5px;
+            font-weight: 600;
+            line-height: 1.35;
+            background-color: #fef2f2;
+            color: #b91c1c;
+            border: 1px solid #fecaca;
+            display: none;
+            align-items: flex-start;
+            gap: 6px;
+        }
+        .tangent-error-box.visible { display: flex; }
+
+        .input-confirm-hint {
+            font-size: 10.5px;
+            color: var(--text-muted);
+            margin-top: 3px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .input-confirm-hint .pending-badge {
+            color: #8b5cf6;
+            font-weight: 600;
+            display: none;
+        }
+        .input-confirm-hint .pending-badge.visible {
+            display: inline;
+        }
+
+        /* Caja de cámara y depuración de 21 landmarks */
+        .ui2-camera-box { width: 100%; height: 205px; background-color: #e5e7eb; border-radius: 8px; border: 1px dashed #9ca3af; display: flex; justify-content: center; align-items: center; margin-top: 6px; color: var(--text-muted); font-size: 13px; font-weight: 500; text-align: center; padding: 0; overflow: hidden; position: relative; }
+        
+        .camera-stream-wrapper { position: relative; width: 100%; height: 100%; border-radius: 6px; overflow: hidden; background: #09090b; }
+        .camera-stream-wrapper video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); position: absolute; top:0; left:0; opacity: 0.88; }
+        .camera-stream-wrapper canvas { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); position: absolute; top:0; left:0; pointer-events: none; z-index: 5; }
+        
+        /* HUD de depuración sobre la cámara (sin invertir) */
+        .hand-debug-hud {
+            position: absolute;
+            inset: 0;
+            z-index: 8;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 7px 8px;
+        }
+        .debug-top-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 6px;
+        }
+        .debug-badge {
+            background: rgba(15, 23, 42, 0.82);
+            backdrop-filter: blur(4px);
+            color: #f8fafc;
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            border-radius: 6px;
+            padding: 3px 8px;
+            font-size: 11px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .debug-badge .count-num {
+            color: #34d399;
+            font-size: 13px;
+            font-weight: 800;
+        }
+        .debug-bottom-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 4px;
+            background: rgba(15, 23, 42, 0.82);
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            border-radius: 6px;
+            padding: 4px 7px;
+        }
+        .finger-pills {
+            display: flex;
+            gap: 4px;
+        }
+        .finger-pill {
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 5px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.12);
+            color: #94a3b8;
+            transition: all 0.15s ease;
+        }
+        .finger-pill.up {
+            background: #10b981;
+            color: #ffffff;
+            box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+        }
+        .stability-tag {
+            font-size: 10px;
+            color: #cbd5e1;
+            font-weight: 500;
+        }
+
+        .camera-loading { position: absolute; inset: 0; background: rgba(0,0,0,0.65); color: white; display: flex; justify-content: center; align-items: center; font-size: 12px; z-index: 10; }
+        
+        .ui2-gestures-title { font-size: 14px; font-weight: 600; margin: 2px 0 8px 0; color: var(--text-main); }
+        
+        .gesture-item { display: flex; flex-direction: column; background-color: var(--bg-panel); border: 1px solid var(--border-color); padding: 7px 12px; border-radius: 10px; margin-bottom: 5px; transition: all 0.2s; }
+        .gesture-item-header { display: flex; align-items: center; gap: 10px; cursor: pointer; width: 100%; }
+        .gesture-item:hover { border-color: #8b5cf6; }
+        .gesture-item.active { border-color: #8b5cf6; background-color: #f5f3ff; }
+        
+        .gesture-pill { background-color: white; border: 1px solid var(--border-color); border-radius: 8px; padding: 3px 7px; font-size: 11px; font-weight: bold; color: var(--text-muted); min-width: 55px; text-align: center; }
+        .gesture-item.active .gesture-pill { background-color: #8b5cf6; color: white; border-color: #8b5cf6; }
+        
+        .gesture-desc { font-size: 12px; color: var(--text-main); font-weight: 500; }
+        
+        .gesture-toggle { margin-left: auto; width: 38px; height: 20px; background-color: #d1d5db; border-radius: 10px; position: relative; transition: all 0.3s; display: flex; align-items: center; }
+        .gesture-toggle::after { content: ''; position: absolute; left: 2px; width: 16px; height: 16px; background-color: white; border-radius: 50%; transition: transform 0.3s; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        .gesture-item.active .gesture-toggle { background-color: var(--success-bg); }
+        .gesture-item.active .gesture-toggle::after { transform: translateX(18px); }
+
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; margin-top: 5px; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 14px; width: 14px; border-radius: 50%; background: #8b5cf6; cursor: pointer; margin-top: -5px; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: #d1d5db; border-radius: 2px; }
+
+        /* MODAL DE SELECCIÓN OBLIGATORIA */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); display: flex; justify-content: center; align-items: center; z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; backdrop-filter: blur(3px); }
+        .modal-overlay.visible { opacity: 1; pointer-events: auto; }
+        .modal-box { background: white; border-radius: 16px; width: 400px; max-width: 90%; padding: 25px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); transform: translateY(20px); transition: transform 0.3s ease; }
+        .modal-overlay.visible .modal-box { transform: translateY(0); }
+        .modal-title { font-size: 18px; font-weight: bold; margin-bottom: 15px; color: var(--text-main); }
+        .modal-subtitle { font-size: 14px; color: var(--text-muted); margin-bottom: 20px; }
+        .modal-list { display: flex; flex-direction: column; gap: 10px; max-height: 250px; overflow-y: auto; padding-right: 5px; }
+        .modal-func-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 15px; background: var(--bg-panel); border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer; transition: all 0.2s; }
+        .modal-func-item:hover { border-color: #8b5cf6; background: #f5f3ff; }
+        .modal-func-name { font-weight: 600; font-size: 14px; color: var(--text-main); }
+        .modal-close-btn { margin-top: 20px; background: #e5e7eb; color: var(--text-main); }
+        .modal-close-btn:hover { background: #d1d5db; }
+        .modal-empty { text-align: center; padding: 20px; color: var(--text-muted); font-size: 14px; font-style: italic; }
+
+        /* MENÚS FLOTANTES MANTENIDOS */
+        .tools-popover, .calculator-popover { position: absolute; bottom: 20px; right: 410px; background: var(--bg-keyboard); border: 1px solid var(--border-color); border-radius: 12px; box-shadow: 0 15px 35px rgba(0,0,0,0.15); display: none; z-index: 101; overflow: hidden; user-select: none; }
+        .tools-popover { width: 280px; background: white; }
+        .calculator-popover { width: 600px; }
+        .tools-popover.visible, .calculator-popover.visible { display: flex; flex-direction: column; }
+        .tools-header { padding: 12px 15px; border-bottom: 1px solid var(--border-color); font-weight: 600; font-size: 14px; background: var(--bg-keyboard); display: flex; justify-content: space-between; align-items: center;}
+        .tools-close, .close-calc { cursor: pointer; color: var(--text-muted); }
+        .tools-close:hover, .close-calc:hover { color: var(--danger-text); }
+        .tools-body { padding: 15px; display: flex; flex-direction: column; gap: 15px; }
+        .tools-section { display: flex; flex-direction: column; gap: 8px; }
+        .tools-section-title { font-size: 12px; font-weight: bold; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .tools-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+        .tool-btn { background-color: var(--bg-panel); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px; font-size: 13px; cursor: pointer; transition: background 0.1s; color: var(--text-main); text-align: center; }
+        .tool-btn:hover { background-color: #e5e7eb; }
+        .tool-btn-wide { grid-column: span 2; }
+        .color-label { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; cursor: pointer; }
+        .color-input { width: 20px; height: 20px; padding: 0; border: none; border-radius: 4px; cursor: pointer; background: transparent;}
+
+        .calc-tabs { display: flex; background-color: white; border-bottom: 1px solid var(--border-color); }
+        .calc-tab { flex: 1; padding: 12px; text-align: center; font-size: 14px; font-weight: 600; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; }
+        .calc-tab.active { color: #8b5cf6; border-bottom-color: #8b5cf6; background-color: var(--bg-keyboard); }
+        .close-calc { padding: 12px 20px; font-size: 14px; border-left: 1px solid var(--border-color); }
+        .calc-body { padding: 15px; }
+        .calc-grid { display: none; gap: 6px; }
+        .calc-grid.active { display: grid; }
+        .grid-main { grid-template-columns: repeat(9, 1fr); }
+        .grid-funcs { grid-template-columns: repeat(8, 1fr); }
+        .calc-btn { background-color: white; border: 1px solid var(--border-color); border-radius: 6px; padding: 10px 0; font-size: 15px; cursor: pointer; display: flex; justify-content: center; align-items: center; color: var(--text-main); }
+        .calc-btn:hover { background-color: #e5e7eb; }
+        .calc-btn.num { font-weight: bold; font-size: 16px; }
+        .calc-btn.op { background-color: #f3f4f6; }
+        .calc-btn.control { background-color: #e2e8f0; font-weight: bold; }
+        .calc-btn.enter { background-color: #8b5cf6; color: white; border: none; }
+        .btn-wide { grid-column: span 2; }
+        .visual-math { display: inline-flex; align-items: center; }
+        .visual-frac { display: inline-flex; flex-direction: column; align-items: center; line-height: 1.1; font-size: 11px; }
+        .visual-frac hr { width: 100%; margin: 1px 0; border: none; border-top: 1px solid currentColor; }
+        .visual-root { border-top: 1px solid currentColor; padding-top: 1px; margin-left: 1px; }
+
+        @media (max-width: 1024px) {
+            main { flex-direction: column; }
+            .sidebar-wrapper { width: 100%; border-top: 1px solid var(--border-color); height: 48vh; border-left: none; }
+            .graph-area { height: 52vh; flex: none; margin: 10px; }
+            .calculator-popover, .tools-popover { bottom: 0; right: 0; width: 100%; border-radius: 12px 12px 0 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- MODAL DE SELECCIÓN OBLIGATORIA -->
+    <div class="modal-overlay" id="func-modal">
+        <div class="modal-box">
+            <div class="modal-title">Seleccionar Función Base</div>
+            <div class="modal-subtitle">Selecciona la función matemática principal sobre la cual se aplicarán los gestos interactivos.</div>
+            <div class="modal-list" id="modal-functions-list"></div>
+            <button class="btn-gradient modal-close-btn" id="btn-close-modal">Cancelar</button>
+        </div>
+    </div>
+
+    <div class="app-container">
+        <!-- HEADER COMÚN -->
+        <header>
+            <div class="logo-container">
+                <div class="logo-bars"><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div></div>
+                <div class="logo-text">Dachtyla<span class="logo-version">v1.0</span></div>
+            </div>
+            <div class="header-status-container">
+                <div class="status-badge" id="camera-status"><div class="status-dot"></div>Seguimiento inactivo</div>
+                <div class="scale-info" id="scale-display">Escala: 40px</div>
+            </div>
+        </header>
+
+        <main>
+            <!-- GRAPH AREA -->
+            <div class="graph-area" id="graph-container">
+                <canvas id="particle-canvas"></canvas>
+                
+                <!-- TEXTO FLOTANTE DE LA INTERFAZ 2 -->
+                <div class="ui2-floating-label" id="ui2-floating-label">
+                    <div class="ui2-floating-row">Función Base: <span id="float-base-func">--</span></div>
+                    <div class="ui2-floating-row">Gesto Activo: <span id="float-gesture-name">Ninguno</span></div>
+                    <div class="ui2-floating-divider"></div>
+                    <div class="ui2-floating-result" id="float-result-text">Mostrando curva base</div>
+                </div>
+            </div>
+
+            <!-- SIDEBAR WRAPPER -->
+            <aside class="sidebar-wrapper">
+                
+                <!-- ================== INTERFAZ 1 (ACTIVA POR DEFECTO) ================== -->
+                <div class="sidebar-view view-active" id="sidebar-ui1">
+                    <div class="panel">
+                        <h3>Nueva función</h3>
+                        <div class="input-group">
+                            <input type="text" id="func-name" placeholder="Ingresar nombre de la función" autocomplete="off">
+                        </div>
+                        <div class="input-group">
+                            <label class="input-label">Expresión estructurada (con respecto a x)</label>
+                            <div class="expression-container">
+                                <span class="fx-label">f(x) =</span>
+                                <math-field id="func-expr" math-virtual-keyboard-policy="none" menu-policy="none"></math-field>
+                                
+                                <div class="icon-btn" id="btn-tools" title="Herramientas y Configuración">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                                    </svg>
+                                </div>
+                                <div class="icon-btn" id="btn-keyboard" title="Calculadora Científica">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect><line x1="6" y1="8" x2="6" y2="8"></line><line x1="10" y1="8" x2="10" y2="8"></line><line x1="14" y1="8" x2="14" y2="8"></line><line x1="18" y1="8" x2="18" y2="8"></line><line x1="6" y1="12" x2="6" y2="12"></line><line x1="10" y1="12" x2="10" y2="12"></line><line x1="14" y1="12" x2="14" y2="12"></line><line x1="18" y1="12" x2="18" y2="12"></line><line x1="8" y1="16" x2="16" y2="16"></line>
+                                    </svg>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- MENSAJE DE ADVERTENCIA PARA INDETERMINACIONES -->
+                    <div id="indeterminate-warning" style="display: none; color: var(--danger-text); background-color: var(--danger-bg); padding: 10px; border-radius: 8px; font-size: 13px; font-weight: 600; text-align: center; margin-bottom: 15px;">
+                        Esta función está indeterminada
+                    </div>
+
+                    <button class="btn-gradient" id="btn-save">Guardar función</button>
+
+                    <div style="margin-top: auto;">
+                        <div class="saved-functions-title">Funciones guardadas</div>
+                        <div id="saved-slots-container"></div>
+                    </div>
+
+                    <button class="btn-gradient" id="btn-activate-camera" style="margin-top: 0px;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 5px;">
+                            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle>
+                        </svg>
+                        ACTIVAR CÁMARA
+                    </button>
+                </div>
+
+                <!-- ================== INTERFAZ 2 (OCULTA POR DEFECTO) ================== -->
+                <div class="sidebar-view view-hidden-right" id="sidebar-ui2">
+                    
+                    <div class="panel">
+                        <span class="ui2-info-text">Información principal:</span>
+                        <div class="ui2-math-display">
+                            f(x) = <math-field id="ui2-active-func" read-only style="display:inline-block; vertical-align:middle;" menu-policy="none"></math-field>
+                        </div>
+                        <div class="ui2-domain-range">
+                            <div><span>Dominio:</span> ℝ (Genérico)</div>
+                            <div id="display-range"><span>Rango matemático:</span> <span id="math-range-val">Calculando...</span></div>
+                        </div>
+                        <div class="ui2-gesture-info" id="ui2-gesture-info">
+                            Sin gesto activo.
+                        </div>
+                        
+                        <div class="ui2-camera-box" id="ui2-camera-box-container">
+                            <div class="camera-loading" id="camera-loading">Cargando IA...</div>
+                            SIN PERMISOS DE CÁMARA
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="ui2-gestures-title" id="ui2-gestures-title">Gestos Interactivos</div>
+                        <div id="ui2-gestures-list"></div>
+                    </div>
+
+                    <button class="btn-gradient mt-auto" id="btn-deactivate-camera" style="background: linear-gradient(135deg, #4f46e5, #db2777);">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 5px;">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle><line x1="1" y1="1" x2="23" y2="23"></line>
+                        </svg>
+                        DESACTIVAR CÁMARA
+                    </button>
+                </div>
+            </aside>
+        </main>
+    </div>
+
+    <!-- MENÚS FLOTANTES MANTENIDOS INTACTOS (UI 1) -->
+    <div class="tools-popover" id="tools-popover">
+        <div class="tools-header">Herramientas <span class="tools-close" id="close-tools">✕</span></div>
+        <div class="tools-body">
+            <div class="tools-section"><div class="tools-section-title">Edición</div><div class="tools-grid">
+                <button class="tool-btn" data-tool="cutToClipboard">Cortar</button><button class="tool-btn" data-tool="copyToClipboard">Copiar</button>
+                <button class="tool-btn" data-tool="pasteFromClipboard">Pegar</button><button class="tool-btn" data-tool="selectAll">Sel. Todo</button>
+            </div></div>
+            <div class="tools-section"><div class="tools-section-title">Apariencia</div><div class="tools-grid">
+                <label class="tool-btn color-label">Color <input type="color" id="tool-color" class="color-input" value="#1f2937"></label>
+                <label class="tool-btn color-label">Fondo <input type="color" id="tool-bg" class="color-input" value="#ffffff"></label>
+                <button class="tool-btn tool-btn-wide" id="tool-font">Alternar estilo de fuente (Cursiva)</button>
+            </div></div>
+            <div class="tools-section"><div class="tools-section-title">Configuración</div><button class="tool-btn tool-btn-wide" id="tool-mode">Modo: Matemática</button></div>
+        </div>
+    </div>
+
+    <div class="calculator-popover" id="calc-popover">
+        <div class="calc-tabs">
+            <div class="calc-tab active" data-tab="tab-main">Matemática</div><div class="calc-tab" data-tab="tab-funcs">Funciones y Cálculo</div><div class="close-calc" id="close-calc">✕</div>
+        </div>
+        <div class="calc-body">
+            <div class="calc-grid grid-main active" id="tab-main">
+                <button class="calc-btn" data-insert="x">x</button><button class="calc-btn" data-insert="y">y</button>
+                <button class="calc-btn" data-insert="\pi">π</button><button class="calc-btn" data-insert="e">e</button>
+                <button class="calc-btn num" data-insert="7">7</button><button class="calc-btn num" data-insert="8">8</button>
+                <button class="calc-btn num" data-insert="9">9</button><button class="calc-btn op" data-insert="\cdot">×</button><button class="calc-btn op" data-insert="/">÷</button>
+                <button class="calc-btn" data-insert="{#@}^2"><span class="visual-math">□<sup>2</sup></span></button>
+                <button class="calc-btn" data-insert="{#@}^{\placeholder{}}"><span class="visual-math">□<sup>□</sup></span></button>
+                <button class="calc-btn" data-insert="\sqrt{#@}"><span class="visual-math">√<span class="visual-root">□</span></span></button>
+                <button class="calc-btn" data-insert="\left|#@\right|"><span class="visual-math">|□|</span></button>
+                <button class="calc-btn num" data-insert="4">4</button><button class="calc-btn num" data-insert="5">5</button>
+                <button class="calc-btn num" data-insert="6">6</button><button class="calc-btn op" data-insert="+">+</button><button class="calc-btn op" data-insert="-">-</button>
+                <button class="calc-btn" data-insert="<"><</button><button class="calc-btn" data-insert=">">></button>
+                <button class="calc-btn" data-insert="\frac{#@}{\placeholder{}}"><div class="visual-frac"><span>□</span><hr><span>□</span></div></button>
+                <button class="calc-btn" data-insert="%">%</button>
+                <button class="calc-btn num" data-insert="1">1</button><button class="calc-btn num" data-insert="2">2</button>
+                <button class="calc-btn num" data-insert="3">3</button><button class="calc-btn op" data-insert="=">=</button>
+                <button class="calc-btn control" data-cmd="deleteBackward">⌫</button>
+                <button class="calc-btn" data-insert="\left(#@\right)"><span class="visual-math">(□)</span></button>
+                <button class="calc-btn" data-insert=",">,</button><button class="calc-btn" data-insert="[">[</button><button class="calc-btn" data-insert="]">]</button>
+                <button class="calc-btn num" data-insert="0">0</button><button class="calc-btn num" data-insert=".">.</button>
+                <button class="calc-btn control" data-cmd="moveToPreviousChar">◄</button><button class="calc-btn control" data-cmd="moveToNextChar">►</button>
+                <button class="calc-btn enter" data-cmd="enter">↵</button>
+            </div>
+            <div class="calc-grid grid-funcs" id="tab-funcs">
+                <button class="calc-btn" data-insert="\sin\left(#@\right)">sen(□)</button><button class="calc-btn" data-insert="\cos\left(#@\right)">cos(□)</button>
+                <button class="calc-btn" data-insert="\tan\left(#@\right)">tan(□)</button><button class="calc-btn" data-insert="!">!</button>
+                <button class="calc-btn" data-insert="^{\circ}">°</button><button class="calc-btn" data-insert="\infty">∞</button>
+                <button class="calc-btn control btn-wide" data-cmd="deleteBackward">⌫</button>
+                <button class="calc-btn" data-insert="\arcsin\left(#@\right)">sen⁻¹(□)</button><button class="calc-btn" data-insert="\arccos\left(#@\right)">cos⁻¹(□)</button>
+                <button class="calc-btn" data-insert="\arctan\left(#@\right)">tan⁻¹(□)</button><button class="calc-btn" data-insert="\{">{</button>
+                <button class="calc-btn" data-insert="\}">}</button><button class="calc-btn" data-insert="\le">≤</button><button class="calc-btn" data-insert="\ge">≥</button>
+                <button class="calc-btn control" data-cmd="moveToPreviousChar">◄</button>
+                <button class="calc-btn" data-insert="\ln\left(#@\right)">ln(□)</button><button class="calc-btn" data-insert="\log_{10}\left(#@\right)">log₁₀(□)</button>
+                <button class="calc-btn" data-insert="\log_{\placeholder{}}\left(#@\right)">log<sub>□</sub>(□)</button>
+                <button class="calc-btn" data-insert="\frac{d}{dx}\left(#@\right)"><span class="visual-math">d/dx(□)</span></button>
+                <button class="calc-btn" data-insert="\int #@ \,dx"><span class="visual-math">∫□dx</span></button>
+                <button class="calc-btn" data-insert="\lim_{x \to \placeholder{}}\left(#@\right)">lim</button>
+                <button class="calc-btn control" data-cmd="moveToNextChar">►</button><button class="calc-btn enter" data-cmd="enter">↵</button>
+                <button class="calc-btn" data-insert="e^{\placeholder{}}">e<sup>□</sup></button><button class="calc-btn" data-insert="10^{\placeholder{}}">10<sup>□</sup></button>
+                <button class="calc-btn" data-insert="\sqrt[\placeholder{}]{#@}"><sup>□</sup>√□</button><button class="calc-btn" data-insert="_{\placeholder{}}">_ (sub)</button>
+                <button class="calc-btn" style="visibility: hidden;"></button><button class="calc-btn" style="visibility: hidden;"></button>
+                <button class="calc-btn btn-wide control" data-cmd="deleteAll">Limpiar Todo</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        if (window.MathfieldElement) {
+            window.MathfieldElement.defaultOptions.menuPolicy = 'none';
+        }
+
+        // Registrar alias ln() en Math.js para logaritmo natural
+        if (window.math) {
+            math.import({ ln: Math.log }, { override: true });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            window.mathVirtualKeyboard.policy = 'none';
+
+            // --- REFERENCIAS UI 1 ---
+            const btnSave = document.getElementById('btn-save');
+            const inputName = document.getElementById('func-name');
+            const mf = document.getElementById('func-expr');
+            mf.menuPolicy = 'none';
+            mf.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); }, { capture: true });
+
+            const slotsContainer = document.getElementById('saved-slots-container');
+            const btnActivateCamera = document.getElementById('btn-activate-camera');
+            const cameraStatusBadge = document.getElementById('camera-status');
+            const indeterminateWarning = document.getElementById('indeterminate-warning');
+            
+            // --- REFERENCIAS UI 2 ---
+            const sidebarUi1 = document.getElementById('sidebar-ui1');
+            const sidebarUi2 = document.getElementById('sidebar-ui2');
+            const funcModal = document.getElementById('func-modal');
+            const modalFuncList = document.getElementById('modal-functions-list');
+            const btnCloseModal = document.getElementById('btn-close-modal');
+            const btnDeactivateCamera = document.getElementById('btn-deactivate-camera');
+            const ui2ActiveFunc = document.getElementById('ui2-active-func');
+            const scaleDisplay = document.getElementById('scale-display');
+            const cameraBoxContainer = document.getElementById('ui2-camera-box-container');
+            const ui2GesturesTitle = document.getElementById('ui2-gestures-title');
+            
+            const ui2GestureLabel = document.getElementById('ui2-floating-label');
+            const floatBaseFunc = document.getElementById('float-base-func');
+            const floatGestureName = document.getElementById('float-gesture-name');
+            const floatResultText = document.getElementById('float-result-text');
+            const ui2GesturesList = document.getElementById('ui2-gestures-list');
+            const ui2GestureInfo = document.getElementById('ui2-gesture-info');
+            const mathRangeVal = document.getElementById('math-range-val');
+            
+            // --- REFERENCIAS GRÁFICAS Y MOTOR MATEMÁTICO ---
+            const canvas = document.getElementById('particle-canvas');
+            const ctx = canvas.getContext('2d');
+            const graphContainer = document.getElementById('graph-container');
+            
+            let savedFunctions = JSON.parse(localStorage.getItem('dachtyla_functions')) || [];
+            const MAX_SLOTS = 5;
+            
+            let currentBaseFunction = null; 
+            let particleAnimationId = null;
+            let activeGestureIndex = -1; 
+
+            let scale = 40;
+            let offsetX = 0;
+            let offsetY = 0;
+            let isDragging = false;
+            let lastMouseX = 0, lastMouseY = 0;
+
+            let particlesMap = new Map();
+            let baseCompiled = null;
+            let d1Compiled = null;
+            let d2Compiled = null;
+            let deriv1Str = "", deriv2Str = "";
+            let extremaPoints = [];
+            
+            let asymptotes = [];
+            let holes = [];
+
+            // --- VALOR FIJO DE EVALUACIÓN x = a (ESTABLE, SIN OSCILACIÓN AUTOMÁTICA) ---
+            let evalA = 0;
+            let evalInputValid = true; // Indica si la última entrada de x fue sintácticamente válida
+
+            // --- VARIABLES PARA ESCALA DE MANO (ZOOM 3D) ---
+            let currentHandScale = 1.0;
+            let targetHandScale = 1.0;
+
+            // =======================================================================
+            // --- IA: RECONOCIMIENTO DE MANOS (21 LANDMARKS MEDIAPIPE) Y ESTABILIZACIÓN ---
+            // =======================================================================
+            let mpHands = null;
+            let cameraErrorStr = "";
+            let activeVideoElement = null;
+            let trackingAnimationFrame = null;
+
+            const REQUIRED_STABLE_FRAMES = 7; // Confirmar gesto tras 7 fotogramas consecutivos
+            let fingerStabilityCount = 0;
+            let stableFingerCount = -1;
+            let lastDetectedFingers = -1;
+
+            let noDetectionTimer = null;
+            let gestureActivatedBy = 'manual';
+
+            const resizeObserver = new ResizeObserver(() => { resizeCanvas(); });
+            resizeObserver.observe(graphContainer);
+
+            graphContainer.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                const width = canvas.width, height = canvas.height;
+                const mathX = (mouseX - (width / 2 + offsetX)) / scale;
+                const mathY = ((height / 2 + offsetY) - mouseY) / scale;
+
+                const zoomFactor = e.deltaY < 0 ? 1.15 : 0.85;
+                const newScale = scale * zoomFactor;
+                if (newScale >= 15 && newScale <= 250) {
+                    scale = newScale;
+                    offsetX = mouseX - (width / 2) - (mathX * scale);
+                    offsetY = mouseY - (height / 2) + (mathY * scale);
+                    scaleDisplay.textContent = `Escala: ${Math.round(scale)}px`;
+                    updateMathBounds();
+                }
+            }, { passive: false });
+
+            graphContainer.addEventListener('mousedown', (e) => { if (e.button === 0) { isDragging = true; lastMouseX = e.clientX; lastMouseY = e.clientY; } });
+            window.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                offsetX += e.clientX - lastMouseX;
+                offsetY += e.clientY - lastMouseY;
+                lastMouseX = e.clientX;
+                lastMouseY = e.clientY;
+                updateMathBounds();
+            });
+            window.addEventListener('mouseup', () => { isDragging = false; });
+
+            // --- VALIDACIÓN DE INDETERMINACIÓN DE FUNCIONES (UI 1) ---
+            let isCurrentFuncIndeterminate = false;
+
+            function checkIndeterminate(expr) {
+                if (!expr || expr === '') return false;
+                
+                if (/(?:^|\W)(oo|Infinity)(?:\W|$)/.test(expr)) {
+                    return true;
+                }
+
+                try {
+                    const node = math.parse(expr);
+                    let explicitDivByZero = false;
+                    
+                    node.traverse(function(n) {
+                        if (n.isOperatorNode && n.op === '/') {
+                            if (n.args[1].isConstantNode && n.args[1].value === 0) {
+                                explicitDivByZero = true;
+                            }
+                        }
+                    });
+                    if (explicitDivByZero) return true;
+
+                    const compiled = node.compile();
+                    let validPoints = 0;
+                    let undefinedSymbol = false;
+
+                    const testPoints = [-10000, -1000, -100, -10, -5, -2, -1, -0.5, -0.1, 0, 0.1, 0.5, 1, 2, 5, 10, 100, 1000, 10000];
+                    
+                    for (let x of testPoints) {
+                        try {
+                            let y = compiled.evaluate({ x: x });
+                            if (y && y.isComplex) {
+                                if (Math.abs(y.im) < 1e-10) {
+                                    y = y.re;
+                                } else {
+                                    continue; 
+                                }
+                            }
+                            if (typeof y === 'number' && !isNaN(y) && isFinite(y)) {
+                                validPoints++;
+                            }
+                        } catch (e) {
+                            if (e.message && (e.message.includes('Undefined symbol') || e.message.includes('Undefined function'))) {
+                                undefinedSymbol = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (undefinedSymbol) return false;
+                    return validPoints === 0;
+
+                } catch(e) {
+                    return false;
+                }
+            }
+
+            mf.addEventListener('input', () => {
+                const mathJsExpr = mf.getValue('ascii-math').trim();
+                isCurrentFuncIndeterminate = checkIndeterminate(mathJsExpr);
+                
+                if (isCurrentFuncIndeterminate) {
+                    indeterminateWarning.style.display = 'block';
+                } else {
+                    indeterminateWarning.style.display = 'none';
+                }
+            });
+
+            // =======================================================================
+            // --- MOTOR DE VALIDACIÓN MATEMÁTICA PUNTUAL (DOMINIO / INDETERMINACIÓN / TANGENTE) ---
+            // =======================================================================
+            function parseXExpression(rawText) {
+                if (rawText === null || rawText === undefined) return { ok: false };
+                const cleaned = String(rawText)
+                    .trim()
+                    .replace(/π/g, 'pi')
+                    .replace(/−/g, '-')
+                    .replace(/×/g, '*')
+                    .replace(/÷/g, '/');
+                if (!cleaned) return { ok: false };
+                try {
+                    const val = math.evaluate(cleaned);
+                    if (typeof val === 'number' && !Number.isNaN(val) && Number.isFinite(val)) {
+                        return { ok: true, value: val };
+                    }
+                    return { ok: false };
+                } catch (e) {
+                    return { ok: false };
+                }
+            }
+
+            function evaluateFunctionAtPoint(exprStr, compiledFn, xVal) {
+                if (!compiledFn || typeof xVal !== 'number' || Number.isNaN(xVal) || !Number.isFinite(xVal)) {
+                    return { status: 'error', message: 'Error de evaluación.' };
+                }
+
+                // 1. Inspección simbólica del AST para detectar polos, discontinuidades e indeterminaciones exactas (0/0, 0^0, tan(pi/2), 1/0, etc.)
+                try {
+                    const ast = math.parse(exprStr);
+                    let domainIssue = null;
+
+                    const evalNode = (n) => {
+                        try {
+                            const v = n.compile().evaluate({ x: xVal });
+                            if (v && v.isComplex) {
+                                return Math.abs(v.im) < 1e-10 ? v.re : NaN;
+                            }
+                            return v;
+                        } catch (err) {
+                            return NaN;
+                        }
+                    };
+
+                    ast.traverse((node) => {
+                        if (domainIssue) return;
+
+                        if (node.isFunctionNode) {
+                            const fnName = node.fn.name;
+                            const argVal = node.args[0] ? evalNode(node.args[0]) : NaN;
+
+                            if (typeof argVal === 'number' && Number.isFinite(argVal)) {
+                                if (fnName === 'tan' || fnName === 'sec') {
+                                    // cos(pi/2) en punto flotante es ~6.12e-17, mientras que tan(0) tiene cos(0)=1
+                                    if (Math.abs(Math.cos(argVal)) < 1e-12) {
+                                        domainIssue = { status: 'undefined', message: 'La función no está definida en este punto.' };
+                                    }
+                                } else if (fnName === 'cot' || fnName === 'csc') {
+                                    if (Math.abs(Math.sin(argVal)) < 1e-12) {
+                                        domainIssue = { status: 'undefined', message: 'La función no está definida en este punto.' };
+                                    }
+                                } else if (fnName === 'log' || fnName === 'ln' || fnName === 'log10' || fnName === 'log2') {
+                                    if (argVal <= 1e-15) {
+                                        domainIssue = { status: 'undefined', message: 'La función no está definida en este punto.' };
+                                    }
+                                } else if (fnName === 'sqrt') {
+                                    if (argVal < -1e-15) {
+                                        domainIssue = { status: 'undefined', message: 'La función no está definida en este punto.' };
+                                    }
+                                } else if (fnName === 'asin' || fnName === 'acos') {
+                                    if (Math.abs(argVal) > 1 + 1e-12) {
+                                        domainIssue = { status: 'undefined', message: 'La función no está definida en este punto.' };
+                                    }
+                                }
+                            }
+                        } else if (node.isOperatorNode && node.op === '/') {
+                            const numVal = evalNode(node.args[0]);
+                            const denVal = evalNode(node.args[1]);
+                            const numZero = (typeof numVal === 'number' && Math.abs(numVal) < 1e-13);
+                            const denZero = (typeof denVal === 'number' && Math.abs(denVal) < 1e-13);
+
+                            if (denZero) {
+                                if (numZero) {
+                                    domainIssue = { status: 'indeterminate', message: 'Indeterminación en este punto.' };
+                                } else {
+                                    domainIssue = { status: 'undefined', message: 'La función no está definida en este punto.' };
+                                }
+                            }
+                        } else if (node.isOperatorNode && node.op === '^') {
+                            const baseVal = evalNode(node.args[0]);
+                            const expVal = evalNode(node.args[1]);
+                            if (typeof baseVal === 'number' && typeof expVal === 'number') {
+                                if (Math.abs(baseVal) < 1e-14 && Math.abs(expVal) < 1e-14) {
+                                    domainIssue = { status: 'indeterminate', message: 'Indeterminación en este punto.' };
+                                } else if (Math.abs(baseVal) < 1e-14 && expVal < 0) {
+                                    domainIssue = { status: 'undefined', message: 'La función no está definida en este punto.' };
+                                } else if (baseVal < 0 && Math.abs(expVal - Math.round(expVal)) > 1e-12) {
+                                    domainIssue = { status: 'undefined', message: 'La función no está definida en este punto.' };
+                                }
+                            }
+                        }
+                    });
+
+                    if (domainIssue) return domainIssue;
+                } catch (e) {
+                    return { status: 'error', message: 'Error de evaluación.' };
+                }
+
+                // 2. Evaluación numérica directa
+                try {
+                    let y = compiledFn.evaluate({ x: xVal });
+                    if (y && y.isComplex) {
+                        if (Math.abs(y.im) > 1e-10) {
+                            return { status: 'undefined', message: 'La función no está definida en este punto.' };
+                        }
+                        y = y.re;
+                    }
+                    if (typeof y !== 'number') {
+                        return { status: 'error', message: 'Error de evaluación.' };
+                    }
+                    if (Number.isNaN(y)) {
+                        return { status: 'indeterminate', message: 'Indeterminación en este punto.' };
+                    }
+                    if (!Number.isFinite(y) || Math.abs(y) > 1e13) {
+                        return { status: 'undefined', message: 'La función no está definida en este punto.' };
+                    }
+                    // Limpiar ruido residual de punto flotante (ej. sin(pi) = 1.22e-16 -> 0)
+                    if (Math.abs(y) < 1e-14) y = 0;
+                    return { status: 'ok', y };
+                } catch (e) {
+                    return { status: 'error', message: 'Error de evaluación.' };
+                }
+            }
+
+            function evaluateTangentAtPoint(exprStr, baseFn, d1Expr, d1Fn, xVal) {
+                const fRes = evaluateFunctionAtPoint(exprStr, baseFn, xVal);
+                if (fRes.status !== 'ok') {
+                    let tangentMsg = 'No existe recta tangente: la función no es continua en este punto.';
+                    if (fRes.status === 'indeterminate') {
+                        tangentMsg = 'No existe recta tangente: punto de discontinuidad removible (indeterminación en este punto).';
+                    } else if (fRes.status === 'undefined') {
+                        tangentMsg = 'No existe recta tangente: punto de discontinuidad (la función no está definida en este punto).';
+                    } else {
+                        tangentMsg = 'No existe recta tangente: error de evaluación en este punto.';
+                    }
+                    return { status: 'invalid', funcResult: fRes, tangentMessage: tangentMsg };
+                }
+
+                // La función f(xVal) sí existe; verificamos ahora la existencia de la derivada f'(xVal)
+                const h = 1e-6;
+                const leftRes = evaluateFunctionAtPoint(exprStr, baseFn, xVal - h);
+                const rightRes = evaluateFunctionAtPoint(exprStr, baseFn, xVal + h);
+                const dLeft = (leftRes.status === 'ok') ? (fRes.y - leftRes.y) / h : NaN;
+                const dRight = (rightRes.status === 'ok') ? (rightRes.y - fRes.y) / h : NaN;
+
+                const d1Res = d1Fn ? evaluateFunctionAtPoint(d1Expr, d1Fn, xVal) : { status: 'error' };
+
+                if (d1Res.status === 'ok') {
+                    // Verificar que no haya salto entre derivadas laterales (punto anguloso)
+                    if (Number.isFinite(dLeft) && Number.isFinite(dRight) &&
+                        Math.abs(dLeft - dRight) > 1e-2 && Math.abs(dLeft - d1Res.y) > 1e-2) {
+                        return {
+                            status: 'invalid',
+                            funcResult: fRes,
+                            tangentMessage: 'No existe recta tangente: punto anguloso (las derivadas laterales no coinciden).'
+                        };
+                    }
+                    return { status: 'ok', funcResult: fRes, y: fRes.y, m: d1Res.y };
+                }
+
+                // La derivada simbólica no pudo evaluarse en xVal: diagnosticar la causa exacta
+                const oneSidedDomain = (leftRes.status !== 'ok' && rightRes.status === 'ok') ||
+                                       (rightRes.status !== 'ok' && leftRes.status === 'ok');
+                if (oneSidedDomain) {
+                    if ((Number.isFinite(dRight) && Math.abs(dRight) > 1e4) || (Number.isFinite(dLeft) && Math.abs(dLeft) > 1e4)) {
+                        return {
+                            status: 'invalid',
+                            funcResult: fRes,
+                            tangentMessage: 'No existe recta tangente: tangente vertical en el extremo del dominio.'
+                        };
+                    }
+                    return {
+                        status: 'invalid',
+                        funcResult: fRes,
+                        tangentMessage: 'No existe recta tangente: punto en el extremo del dominio (derivada bilateral inexistente).'
+                    };
+                }
+
+                if ((Number.isFinite(dLeft) && Math.abs(dLeft) > 1e5) ||
+                    (Number.isFinite(dRight) && Math.abs(dRight) > 1e5) ||
+                    d1Res.status === 'undefined') {
+                    return {
+                        status: 'invalid',
+                        funcResult: fRes,
+                        tangentMessage: 'No existe recta tangente: tangente vertical (derivada infinita en este punto).'
+                    };
+                }
+
+                if (Number.isFinite(dLeft) && Number.isFinite(dRight) && Math.abs(dLeft - dRight) > 1e-3) {
+                    return {
+                        status: 'invalid',
+                        funcResult: fRes,
+                        tangentMessage: 'No existe recta tangente: punto anguloso (las derivadas laterales no coinciden).'
+                    };
+                }
+
+                return {
+                    status: 'invalid',
+                    funcResult: fRes,
+                    tangentMessage: 'No existe recta tangente: la derivada no está definida en este punto.'
+                };
+            }
+
+            // --- UI 1 ---
+            function renderSlots() {
+                slotsContainer.innerHTML = '';
+                for (let i = 0; i < MAX_SLOTS; i++) {
+                    const func = savedFunctions[i];
+                    const slot = document.createElement('div');
+                    slot.className = 'saved-slot';
+                    if (func) {
+                        slot.innerHTML = `
+                            <div class="slot-left"><span class="slot-num">${i + 1}</span><div class="slot-dot active"></div><span class="slot-name active">${func.name}</span></div>
+                            <div class="slot-expr-container"><span class="slot-expr"><math-field read-only menu-policy="none">${func.latexExpr}</math-field></span>
+                            <svg class="trash-icon" data-index="${i}" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg></div>
+                        `;
+                    } else {
+                        slot.innerHTML = `<div class="slot-left"><span class="slot-num">${i + 1}</span><div class="slot-dot"></div><span class="slot-name">Vacío</span></div><span class="slot-expr">f(x)=</span>`;
+                    }
+                    slotsContainer.appendChild(slot);
+                }
+                document.querySelectorAll('.trash-icon').forEach(icon => {
+                    icon.addEventListener('click', (e) => {
+                        savedFunctions.splice(parseInt(e.currentTarget.getAttribute('data-index')), 1);
+                        localStorage.setItem('dachtyla_functions', JSON.stringify(savedFunctions));
+                        renderSlots();
+                    });
+                });
+            }
+            renderSlots();
+
+            let timeoutId;
+            function showTemporaryButtonState(message) {
+                clearTimeout(timeoutId);
+                const originalText = "Guardar función";
+                btnSave.textContent = message;
+                btnSave.classList.add('disabled-temp');
+                btnSave.disabled = true;
+                timeoutId = setTimeout(() => {
+                    btnSave.textContent = originalText;
+                    btnSave.classList.remove('disabled-temp');
+                    btnSave.disabled = false;
+                }, 2500);
+            }
+
+            btnSave.addEventListener('click', () => {
+                const mathJsExpr = mf.getValue('ascii-math').trim(); 
+                
+                if (isCurrentFuncIndeterminate || checkIndeterminate(mathJsExpr)) {
+                    showTemporaryButtonState("Función inválida");
+                    return;
+                }
+
+                const name = inputName.value.trim();
+                const latexExpr = mf.value.trim(); 
+                
+                if (!name || !latexExpr || latexExpr.includes('placeholder')) {
+                    showTemporaryButtonState("Completa ambos campos para guardar");
+                    return;
+                }
+                
+                try { math.parse(mathJsExpr); } catch (error) { showTemporaryButtonState("Función inválida"); return; }
+                
+                if (savedFunctions.length >= MAX_SLOTS) savedFunctions.shift(); 
+                savedFunctions.push({ name, latexExpr, mathJsExpr });
+                localStorage.setItem('dachtyla_functions', JSON.stringify(savedFunctions));
+                renderSlots();
+                
+                inputName.value = '';
+                mf.value = ''; 
+                isCurrentFuncIndeterminate = false;
+                indeterminateWarning.style.display = 'none';
+            });
+
+            // --- LÓGICA DE ACTIVACIÓN DE CÁMARA FRONTAL Y MODAL ---
+            btnActivateCamera.addEventListener('click', () => {
+                navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
+                    .then(stream => { 
+                        window.dachtylaCameraStream = stream; 
+                        cameraErrorStr = "";
+                    })
+                    .catch(err => { 
+                        window.dachtylaCameraStream = null; 
+                        if(err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+                            cameraErrorStr = "Sin permisos de cámara";
+                        } else {
+                            cameraErrorStr = "Cámara no disponible";
+                        }
+                    })
+                    .finally(() => {
+                        modalFuncList.innerHTML = '';
+                        if (savedFunctions.length === 0) {
+                            modalFuncList.innerHTML = `<div class="modal-empty">No hay funciones guardadas.<br>Crea y guarda una función primero.</div>`;
+                        } else {
+                            savedFunctions.forEach((func) => {
+                                const item = document.createElement('div');
+                                item.className = 'modal-func-item';
+                                item.innerHTML = `<span class="modal-func-name">${func.name}</span><span class="slot-expr"><math-field read-only menu-policy="none">${func.latexExpr}</math-field></span>`;
+                                item.addEventListener('click', () => { launchUI2(func); });
+                                modalFuncList.appendChild(item);
+                            });
+                        }
+                        funcModal.classList.add('visible');
+                    });
+            });
+
+            btnCloseModal.addEventListener('click', () => { funcModal.classList.remove('visible'); });
+
+            // --- CÁLCULO DE RANGO MATEMÁTICO MEJORADO ---
+            function calculateMathematicalRange(compiled, exprStr) {
+                if (!compiled) return "ℝ";
+                
+                const expr = exprStr.toLowerCase();
+
+                if (expr.includes('sin') || expr.includes('cos')) {
+                    if (!expr.includes('sinh') && !expr.includes('cosh')) {
+                        return "[-1, 1]";
+                    }
+                }
+
+                if (expr.includes('ln') || expr.includes('log')) {
+                    return "(-∞, ∞)";
+                }
+
+                if (expr.includes('tan') && !expr.includes('atan')) {
+                    return "(-∞, ∞)";
+                }
+
+                let yVals = [];
+                let testPoints = [-1000, -100, -50, -10, -1, -0.1, -0.01, 0.01, 0.1, 1, 10, 50, 100, 1000];
+                
+                for (let x of testPoints) {
+                    try {
+                        let y = compiled.evaluate({ x });
+                        if (typeof y === 'number' && !isNaN(y) && isFinite(y)) {
+                            yVals.push(y);
+                        }
+                    } catch (e) {}
+                }
+
+                if (yVals.length === 0) return "ℝ";
+
+                let minY = Math.min(...yVals);
+                let maxY = Math.max(...yVals);
+
+                let yPosInf = NaN, yNegInf = NaN;
+                try { yPosInf = compiled.evaluate({ x: 10000 }); } catch(e) {}
+                try { yNegInf = compiled.evaluate({ x: -10000 }); } catch(e) {}
+
+                let goesToPosInf = (yPosInf > 100 || yPosInf === Infinity || (!isNaN(yPosInf) && yPosInf > maxY * 1.5));
+                let goesToNegInf = (yNegInf < -100 || yNegInf === -Infinity || (!isNaN(yNegInf) && yNegInf < minY * 1.5));
+                let posOnNegSide = (yNegInf > 100 || (!isNaN(yNegInf) && yNegInf > maxY * 1.5));
+
+                let isAlwaysNonNegative = (minY >= -0.001) && (expr.includes('^2') || expr.includes('abs') || expr.includes('exp') || expr.includes('cosh') || expr.includes('sqr'));
+                
+                if (isAlwaysNonNegative) {
+                    minY = Math.max(0, minY);
+                }
+
+                let leftInf = goesToNegInf || (posOnNegSide && goesToPosInf);
+                let rightInf = goesToPosInf || posOnNegSide;
+
+                if (expr.includes('exp') || expr.includes('e^')) {
+                    return `[0, ∞)`;
+                }
+
+                if (leftInf && rightInf) {
+                    if (isAlwaysNonNegative) {
+                        let rMin = minY <= 0.05 ? "0" : minY.toFixed(1);
+                        return `[${rMin}, ∞)`;
+                    }
+                    return "(-∞, ∞)";
+                } else if (rightInf && !leftInf) {
+                    if (yNegInf < -100 && yPosInf > 100) {
+                        return "(-∞, ∞)";
+                    }
+                    let rMin = minY <= 0.05 && isAlwaysNonNegative ? "0" : minY.toFixed(1);
+                    return `[${rMin}, ∞)`;
+                } else if (leftInf && !rightInf) {
+                    return `(-∞, ${maxY.toFixed(1)}]`;
+                } else {
+                    return `[${minY.toFixed(1)}, ${maxY.toFixed(1)}]`;
+                }
+            }
+
+            // --- GESTOS Y SUCESOS (1 A 5) ---
+            const gestureDefinitions = [
+                { id: 0, fingers: 1, name: "Evaluación en x=a" },
+                { id: 1, fingers: 2, name: "Recta tangente" },
+                { id: 2, fingers: 3, name: "Derivadas" },
+                { id: 3, fingers: 4, name: "Extremos y asíntotas" },
+                { id: 4, fingers: 5, name: "Rotación 3D" }
+            ];
+
+            function setGesture(index, source = 'manual') {
+                if (activeGestureIndex === index && source === 'manual') {
+                    activeGestureIndex = -1; 
+                } else if (activeGestureIndex !== index) {
+                    activeGestureIndex = index;
+                } else {
+                    return; 
+                }
+                
+                gestureActivatedBy = (activeGestureIndex === -1) ? 'manual' : source;
+                
+                if (noDetectionTimer) {
+                    clearTimeout(noDetectionTimer);
+                    noDetectionTimer = null;
+                }
+                
+                ui2GesturesList.innerHTML = '';
+                gestureDefinitions.forEach((gesture) => {
+                    const isActive = (activeGestureIndex === gesture.id);
+                    const item = document.createElement('div');
+                    item.className = 'gesture-item' + (isActive ? ' active' : '');
+                    item.innerHTML = `
+                        <div class="gesture-item-header">
+                            <div class="gesture-pill">${gesture.fingers} dedo${gesture.fingers>1?'s':''}</div>
+                            <div class="gesture-desc">${gesture.name}</div>
+                            <div class="gesture-toggle"></div>
+                        </div>
+                    `;
+                    item.querySelector('.gesture-item-header').addEventListener('click', () => setGesture(gesture.id, 'manual'));
+                    ui2GesturesList.appendChild(item);
+                });
+
+                if (activeGestureIndex === -1) {
+                    floatGestureName.textContent = "Ninguno";
+                    floatResultText.textContent = "Mostrando curva base";
+                    ui2GestureInfo.innerHTML = "Sin gesto activo.";
+                    graphContainer.classList.remove('dark-mode');
+                } else {
+                    const def = gestureDefinitions[activeGestureIndex];
+                    floatGestureName.textContent = def.name;                    
+                    floatResultText.textContent = `Acción: ${def.name} aplicada`;
+                    
+                    if (activeGestureIndex === 4) {
+                        graphContainer.classList.add('dark-mode');
+                    } else {
+                        graphContainer.classList.remove('dark-mode');
+                    }
+                }
+                updateGestureInfoPanel();
+                updateMathBounds();
+            }
+
+            // Actualiza el estado visual de evaluación y mensajes de error debajo del campo de entrada
+            function refreshEvaluationReadout() {
+                const pointDisplay = document.getElementById('point-display');
+                const evalErrorBox = document.getElementById('eval-error-box');
+                const tangentErrorBox = document.getElementById('tangent-error-box');
+                if (!pointDisplay || !evalErrorBox) return;
+
+                const exprStr = currentBaseFunction ? (currentBaseFunction.mathJsExpr || currentBaseFunction.latexExpr) : '';
+
+                // Limpiar clases previas
+                evalErrorBox.className = 'eval-error-box';
+                evalErrorBox.textContent = '';
+                if (tangentErrorBox) {
+                    tangentErrorBox.className = 'tangent-error-box';
+                    tangentErrorBox.textContent = '';
+                }
+
+                if (!evalInputValid) {
+                    evalErrorBox.classList.add('visible', 'error-eval');
+                    evalErrorBox.textContent = '⚠ Error de evaluación.';
+                    pointDisplay.textContent = 'Punto: No disponible';
+                    pointDisplay.style.color = 'var(--danger-text)';
+                    return;
+                }
+
+                if (activeGestureIndex === 0) {
+                    const res = evaluateFunctionAtPoint(exprStr, baseCompiled, evalA);
+                    if (res.status === 'ok') {
+                        pointDisplay.textContent = `Punto: (${evalA.toFixed(4).replace(/\.?0+$/, '') || '0'}, ${res.y.toFixed(4).replace(/\.?0+$/, '') || '0'})`;
+                        pointDisplay.style.color = '#8b5cf6';
+                    } else {
+                        const cssClass = res.status === 'indeterminate' ? 'error-indeterminate' :
+                                         res.status === 'undefined' ? 'error-undefined' : 'error-eval';
+                        evalErrorBox.classList.add('visible', cssClass);
+                        evalErrorBox.textContent = `⚠ ${res.message}`;
+                        pointDisplay.textContent = `Punto en x = ${evalA.toFixed(4).replace(/\.?0+$/, '') || '0'}: No definido`;
+                        pointDisplay.style.color = 'var(--danger-text)';
+                    }
+                } else if (activeGestureIndex === 1) {
+                    const tanRes = evaluateTangentAtPoint(exprStr, baseCompiled, deriv1Str, d1Compiled, evalA);
+                    if (tanRes.status === 'ok') {
+                        const xClean = evalA.toFixed(4).replace(/\.?0+$/, '') || '0';
+                        const yClean = tanRes.y.toFixed(4).replace(/\.?0+$/, '') || '0';
+                        const mClean = tanRes.m.toFixed(4).replace(/\.?0+$/, '') || '0';
+                        pointDisplay.textContent = `Punto: (${xClean}, ${yClean}) | Pendiente m = ${mClean}`;
+                        pointDisplay.style.color = '#059669';
+                    } else {
+                        const fRes = tanRes.funcResult;
+                        if (fRes.status !== 'ok') {
+                            const cssClass = fRes.status === 'indeterminate' ? 'error-indeterminate' :
+                                             fRes.status === 'undefined' ? 'error-undefined' : 'error-eval';
+                            evalErrorBox.classList.add('visible', cssClass);
+                            evalErrorBox.textContent = `⚠ ${fRes.message}`;
+                            pointDisplay.textContent = `Punto en x = ${evalA.toFixed(4).replace(/\.?0+$/, '') || '0'}: No definido`;
+                        } else {
+                            const xClean = evalA.toFixed(4).replace(/\.?0+$/, '') || '0';
+                            const yClean = fRes.y.toFixed(4).replace(/\.?0+$/, '') || '0';
+                            pointDisplay.textContent = `Punto: (${xClean}, ${yClean}) | Pendiente m: No existe`;
+                        }
+                        pointDisplay.style.color = 'var(--danger-text)';
+                        if (tangentErrorBox && tanRes.tangentMessage) {
+                            tangentErrorBox.classList.add('visible');
+                            tangentErrorBox.textContent = `⚠ ${tanRes.tangentMessage}`;
+                        }
+                    }
+                }
+            }
+
+            function updateGestureInfoPanel() {
+                if (activeGestureIndex === -1) return;
+
+                const cx = (canvas.width / 2) + offsetX;
+                const minX = -cx / scale;
+                const maxX = (canvas.width - cx) / scale;
+
+                if (activeGestureIndex === 0 || activeGestureIndex === 1) {
+                    const labelTitle = activeGestureIndex === 0 ? "Control de Gesto (Evaluación fija):" : "Control de Gesto (Recta Tangente fija):";
+                    const formattedInitialX = Number.isInteger(evalA) ? evalA.toString() : evalA.toFixed(4).replace(/\.?0+$/, '');
+                    const clampedSliderVal = Math.max(minX, Math.min(maxX, evalA));
+
+                    ui2GestureInfo.innerHTML = `
+                        <div style="font-weight:600; margin-bottom:4px; font-size:12.5px;">${labelTitle}</div>
+                        <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                            <label for="input-a-val" style="font-size:12px; color:var(--text-muted); font-weight:600;">x =</label>
+                            <input type="text" id="input-a-val" value="${formattedInitialX}" placeholder="Ej: 0, pi/2, -1.5" style="width: 92px; padding: 5px 7px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 13px; text-align: center; outline: none; transition: border-color 0.2s;">
+                            <input type="range" id="slider-a" step="0.05" min="${minX}" max="${maxX}" value="${clampedSliderVal}" style="flex: 1; margin: 0;">
+                        </div>
+                        <div class="input-confirm-hint">
+                            <span>Soporta números y expresiones (ej. π/2)</span>
+                            <span class="pending-badge" id="pending-enter-hint">Presiona Enter ↵</span>
+                        </div>
+                        <div class="eval-error-box" id="eval-error-box"></div>
+                        <div class="tangent-error-box" id="tangent-error-box"></div>
+                        <div id="point-display" style="margin-top: 6px; font-weight: bold; color: #8b5cf6; font-size:12px;"></div>
+                    `;
+                    
+                    const slider = document.getElementById('slider-a');
+                    const inputA = document.getElementById('input-a-val');
+                    const pendingHint = document.getElementById('pending-enter-hint');
+
+                    if (inputA) {
+                        inputA.addEventListener('focus', () => {
+                            inputA.style.borderColor = '#8b5cf6';
+                        });
+                        inputA.addEventListener('blur', () => {
+                            inputA.style.borderColor = 'var(--border-color)';
+                        });
+                        inputA.addEventListener('input', () => {
+                            // Mostrar aviso de confirmación con Enter sin mover aún el punto/tangente
+                            if (pendingHint) pendingHint.classList.add('visible');
+                        });
+                        inputA.addEventListener('keydown', (e) => {
+                            if (e.key === 'Enter') {
+                                e.preventDefault();
+                                if (pendingHint) pendingHint.classList.remove('visible');
+                                const parsed = parseXExpression(inputA.value);
+                                if (parsed.ok) {
+                                    evalA = parsed.value;
+                                    evalInputValid = true;
+                                    if (slider) {
+                                        const sMin = parseFloat(slider.min);
+                                        const sMax = parseFloat(slider.max);
+                                        slider.value = Math.max(sMin, Math.min(sMax, evalA));
+                                    }
+                                } else {
+                                    evalInputValid = false;
+                                }
+                                refreshEvaluationReadout();
+                            }
+                        });
+                    }
+
+                    if (slider) {
+                        slider.addEventListener('input', (e) => {
+                            if (pendingHint) pendingHint.classList.remove('visible');
+                            evalA = parseFloat(e.target.value);
+                            evalInputValid = true;
+                            if (inputA) {
+                                inputA.value = evalA.toFixed(2);
+                            }
+                            refreshEvaluationReadout();
+                        });
+                    }
+
+                    // Evaluar inmediatamente el estado inicial
+                    refreshEvaluationReadout();
+
+                } else if (activeGestureIndex === 2) {
+                    ui2GestureInfo.innerHTML = `
+                        <div style="font-weight:600; margin-bottom:3px;">Derivadas:</div>
+                        <div style="color: #ef4444; font-size:12px;">f'(x) = ${deriv1Str.substring(0,28)}</div>
+                        <div style="color: #3b82f6; font-size:12px;">f''(x) = ${deriv2Str.substring(0,28)}</div>
+                    `;
+                } else if (activeGestureIndex === 3) {
+                    let extHTML = extremaPoints.length > 0 
+                        ? extremaPoints.map(p => `<li><b style="color:${p.type==='Máximo'?'#10b981':'#f59e0b'}">${p.type}</b>: (${p.x.toFixed(1)}, ${p.y.toFixed(1)})</li>`).join('')
+                        : "<li>Sin extremos locales.</li>";
+                    let asympHTML = asymptotes.length > 0
+                        ? asymptotes.map(a => `<li><b style="color:#ef4444">Asíntota Vertical</b>: x ≈ ${a.toFixed(2)}</li>`).join('')
+                        : "";
+                    let holeHTML = holes.length > 0
+                        ? holes.map(h => `<li><b style="color:#f59e0b">Discont. Removible</b>: (${h.x.toFixed(2)}, ${h.y.toFixed(2)})</li>`).join('')
+                        : "";
+
+                    ui2GestureInfo.innerHTML = `
+                        <div style="font-weight:600; margin-bottom:3px;">Análisis Matemático:</div>
+                        <ul style="padding-left: 15px; font-size:11px; line-height: 1.3; margin:0;">
+                            ${extHTML}${asympHTML}${holeHTML}
+                        </ul>
+                    `;
+                } else if (activeGestureIndex === 4) {
+                    ui2GestureInfo.innerHTML = `
+                        <div style="font-weight:600; margin-bottom:3px;">Rotación 3D en Perspectiva:</div>
+                        <div style="font-size:11px;">Giro automático. <b style="color:#8b5cf6;">Acerca o aleja</b> tu mano para hacer zoom.</div>
+                    `;
+                }
+            }
+
+            function setupDerivatives(mathExpr) {
+                try {
+                    const node = math.parse(mathExpr);
+                    const d1 = math.derivative(node, 'x');
+                    const d2 = math.derivative(d1, 'x');
+                    deriv1Str = d1.toString();
+                    deriv2Str = d2.toString();
+                    d1Compiled = d1.compile();
+                    d2Compiled = d2.compile();
+                } catch(e) {
+                    d1Compiled = null; d2Compiled = null;
+                    deriv1Str = "No computable"; deriv2Str = "No computable";
+                }
+            }
+
+            // --- ANÁLISIS MATEMÁTICO MEJORADO ---
+            function analyzeMathematicalFeatures() {
+                asymptotes = [];
+                holes = [];
+                if (!baseCompiled || activeGestureIndex !== 3 || !currentBaseFunction) return;
+                
+                const width = canvas.width;
+                const cx = (width / 2) + offsetX;
+                const minX = -cx / scale;
+                const maxX = (width - cx) / scale;
+                
+                let denominators = [];
+                try {
+                    const ast = math.parse(currentBaseFunction.mathJsExpr || currentBaseFunction.latexExpr);
+                    ast.traverse(function (node) {
+                        if (node.type === 'OperatorNode' && node.op === '/') {
+                            denominators.push(node.args[1].compile());
+                        } else if (node.type === 'FunctionNode') {
+                            if (node.fn.name === 'tan' || node.fn.name === 'sec') {
+                                denominators.push(math.compile(`cos(${node.args[0].toString()})`));
+                            } else if (node.fn.name === 'cot' || node.fn.name === 'csc') {
+                                denominators.push(math.compile(`sin(${node.args[0].toString()})`));
+                            } else if (node.fn.name === 'log' || node.fn.name === 'ln' || node.fn.name === 'log10') {
+                                denominators.push(node.args[0].compile());
+                            }
+                        }
+                    });
+                } catch(e) {}
+
+                const checkRoot = (x0) => {
+                    x0 = parseFloat(x0.toFixed(5));
+                    if (x0 < minX || x0 > maxX) return;
+                    if (asymptotes.some(a => Math.abs(a - x0) < 1e-3) || holes.some(h => Math.abs(h.x - x0) < 1e-3)) return;
+                    
+                    let yMinus = baseCompiled.evaluate({x: x0 - 1e-5});
+                    let yPlus  = baseCompiled.evaluate({x: x0 + 1e-5});
+                    
+                    let isYMinusHuge = Math.abs(yMinus) > 500 || isNaN(yMinus) || !isFinite(yMinus);
+                    let isYPlusHuge  = Math.abs(yPlus) > 500 || isNaN(yPlus) || !isFinite(yPlus);
+
+                    if (isYMinusHuge || isYPlusHuge) {
+                        asymptotes.push(x0);
+                    } else if (!isNaN(yMinus) && !isNaN(yPlus) && Math.abs(yMinus - yPlus) < 5) {
+                        holes.push({x: x0, y: (yMinus + yPlus) / 2});
+                    }
+                };
+
+                const bisection = (func, a, b) => {
+                    let fa = func.evaluate({x: a});
+                    let fb = func.evaluate({x: b});
+                    if (fa * fb > 0) return (a+b)/2;
+                    let mid = a;
+                    for(let i=0; i<30; i++) {
+                        mid = (a+b)/2;
+                        let fmid = func.evaluate({x: mid});
+                        if (Math.abs(fmid) < 1e-6) break;
+                        if (fa * fmid < 0) { b = mid; fb = fmid; }
+                        else { a = mid; fa = fmid; }
+                    }
+                    return mid;
+                };
+
+                checkRoot(0);
+
+                const scanStep = (maxX - minX) / 120;
+                denominators.forEach(denom => {
+                    try {
+                        let prevD = denom.evaluate({x: minX});
+                        for (let x = minX + scanStep; x <= maxX; x += scanStep) {
+                            let currD = denom.evaluate({x});
+                            if (Math.sign(prevD) !== Math.sign(currD) && prevD !== 0 && currD !== 0 && !isNaN(prevD) && !isNaN(currD)) {
+                                let root = bisection(denom, x - scanStep, x);
+                                checkRoot(root);
+                            } else if (Math.abs(currD) < 1e-4) {
+                                checkRoot(x);
+                            }
+                            prevD = currD;
+                        }
+                    } catch(e) {}
+                });
+            }
+
+            function calculateExtrema() {
+                extremaPoints = [];
+                if(!d1Compiled || activeGestureIndex !== 3) return;
+                const width = canvas.width;
+                const cx = (width / 2) + offsetX;
+                const minX = -cx / scale;
+                const maxX = (width - cx) / scale;
+                
+                const step = (maxX - minX) / 80;
+                let prevSign = null;
+                let prevX = minX;
+
+                for(let x = minX; x <= maxX; x += step) {
+                    try {
+                        let d1 = d1Compiled.evaluate({x});
+                        let sign = Math.sign(d1);
+                        
+                        if (prevSign !== null && sign !== prevSign && sign !== 0) {
+                            let rootX = (prevX + x) / 2;
+                            let rootY = baseCompiled.evaluate({x: rootX});
+                            let d2 = d2Compiled.evaluate({x: rootX});
+                            if (!isNaN(rootY) && Math.abs(rootY) < 1000) {
+                                let type = d2 < 0 ? 'Máximo' : 'Mínimo';
+                                extremaPoints.push({x: rootX, y: rootY, type});
+                            }
+                        }
+                        prevSign = sign;
+                        prevX = x;
+                    } catch(e) {}
+                }
+            }
+
+            // =======================================================================
+            // --- DETECCIÓN GEOMÉTRICA DE 21 LANDMARKS (INVARIANTE A ESCALA Y ROTACIÓN) ---
+            // =======================================================================
+            // Estructura de los 21 landmarks de MediaPipe Hands:
+            // 0: Muñeca (WRIST)
+            // 1..4: Pulgar (CMC=1, MCP=2, IP=3, TIP=4) -> 3 articulaciones + punta (referencia muñeca 0)
+            // 5..8: Índice (MCP=5, PIP=6, DIP=7, TIP=8) -> 4 puntos
+            // 9..12: Medio (MCP=9, PIP=10, DIP=11, TIP=12) -> 4 puntos
+            // 13..16: Anular (MCP=13, PIP=14, DIP=15, TIP=16) -> 4 puntos
+            // 17..20: Meñique (MCP=17, PIP=18, DIP=19, TIP=20) -> 4 puntos
+            const HAND_CONNECTIONS = [
+                [0, 1], [1, 2], [2, 3], [3, 4],         // Pulgar
+                [0, 5], [5, 6], [6, 7], [7, 8],         // Índice
+                [5, 9], [9, 10], [10, 11], [11, 12],    // Medio
+                [9, 13], [13, 14], [14, 15], [15, 16],  // Anular
+                [13, 17], [17, 18], [18, 19], [19, 20], // Meñique
+                [0, 17]                                 // Base de la palma
+            ];
+
+            function dist2D(p1, p2) {
+                const dx = p1.x - p2.x;
+                const dy = p1.y - p2.y;
+                return Math.hypot(dx, dy);
+            }
+
+            // Ángulo en grados (0°..180°) en el vértice B formado por los segmentos BA y BC
+            function angleDeg(a, b, c) {
+                const v1x = a.x - b.x;
+                const v1y = a.y - b.y;
+                const v2x = c.x - b.x;
+                const v2y = c.y - b.y;
+                const mag1 = Math.hypot(v1x, v1y);
+                const mag2 = Math.hypot(v2x, v2y);
+                if (mag1 < 1e-6 || mag2 < 1e-6) return 0;
+                const cosTheta = Math.max(-1, Math.min(1, (v1x * v2x + v1y * v2y) / (mag1 * mag2)));
+                return Math.acos(cosTheta) * (180 / Math.PI);
+            }
+
+            function detectFingerCount(landmarks, handedness) {
+                let count = 0;
+                const extendedFingers = {
+                    thumb: false,
+                    index: false,
+                    middle: false,
+                    ring: false,
+                    pinky: false
+                };
+
+                const wrist = landmarks[0];
+                const indexMcp = landmarks[5];
+                const middleMcp = landmarks[9];
+                const ringMcp = landmarks[13];
+                const pinkyMcp = landmarks[17];
+
+                // Tamaño normalizado de la palma (promedio muñeca -> bases MCP de los 4 dedos)
+                // Hace todo el cálculo independiente de la distancia de la mano a la cámara
+                const palmSize = Math.max(
+                    1e-5,
+                    (dist2D(wrist, indexMcp) + dist2D(wrist, middleMcp) + dist2D(wrist, ringMcp) + dist2D(wrist, pinkyMcp)) / 4
+                );
+
+                // Evaluar los 4 dedos largos (Índice, Medio, Anular, Meñique) usando ángulos articulares
+                // y distancias radiales relativas (100% independiente de la rotación de la mano)
+                const fourFingersSpec = [
+                    { key: 'index',  mcp: 5,  pip: 6,  dip: 7,  tip: 8  },
+                    { key: 'middle', mcp: 9,  pip: 10, dip: 11, tip: 12 },
+                    { key: 'ring',   mcp: 13, pip: 14, dip: 15, tip: 16 },
+                    { key: 'pinky',  mcp: 17, pip: 18, dip: 19, tip: 20 }
+                ];
+
+                for (const f of fourFingersSpec) {
+                    const pMcp = landmarks[f.mcp];
+                    const pPip = landmarks[f.pip];
+                    const pDip = landmarks[f.dip];
+                    const pTip = landmarks[f.tip];
+
+                    const pipAngle = angleDeg(pMcp, pPip, pDip);
+                    const dipAngle = angleDeg(pPip, pDip, pTip);
+
+                    const wristToTip = dist2D(wrist, pTip) / palmSize;
+                    const wristToPip = dist2D(wrist, pPip) / palmSize;
+                    const mcpToTip = dist2D(pMcp, pTip) / palmSize;
+                    const mcpToPip = dist2D(pMcp, pPip) / palmSize;
+
+                    const isStraight = (pipAngle > 140) && (dipAngle > 140);
+                    const isExtendedOutward = (wristToTip > wristToPip * 1.06) && (mcpToTip > mcpToPip * 1.15);
+
+                    if (isStraight && isExtendedOutward) {
+                        extendedFingers[f.key] = true;
+                        count++;
+                    }
+                }
+
+                // Evaluar el pulgar de forma especial (articulaciones 1-2-3-4 con muñeca 0 y base índice 5):
+                // 1) Rectitud articular (ángulos CMC-MCP-IP y MCP-IP-TIP)
+                // 2) Distancia relativa punta del pulgar (4) -> base del índice (5) y base del meñique (17)
+                // 3) Proyección sobre el eje transversal local de la palma (Pinky MCP 17 -> Index MCP 5),
+                //    invariante a mano izquierda/derecha y a cualquier ángulo de rotación
+                const thumbCmc = landmarks[1];
+                const thumbMcp = landmarks[2];
+                const thumbIp  = landmarks[3];
+                const thumbTip = landmarks[4];
+
+                const thumbMcpAngle = angleDeg(thumbCmc, thumbMcp, thumbIp);
+                const thumbIpAngle  = angleDeg(thumbMcp, thumbIp, thumbTip);
+
+                const tipToIndexMcp = dist2D(thumbTip, indexMcp) / palmSize;
+                const tipToPinkyMcp = dist2D(thumbTip, pinkyMcp) / palmSize;
+                const mcpToPinkyMcp = dist2D(thumbMcp, pinkyMcp) / palmSize;
+
+                // Vector unitario transversal de la palma (de base meñique 17 hacia base índice 5)
+                const palmAxisX = indexMcp.x - pinkyMcp.x;
+                const palmAxisY = indexMcp.y - pinkyMcp.y;
+                const palmAxisLen = Math.max(1e-5, Math.hypot(palmAxisX, palmAxisY));
+                const ux = palmAxisX / palmAxisLen;
+                const uy = palmAxisY / palmAxisLen;
+
+                // Proyección normalizada del vector del pulgar (MCP 2 -> TIP 4) sobre el eje transversal de la palma
+                const thumbVecX = thumbTip.x - thumbMcp.x;
+                const thumbVecY = thumbTip.y - thumbMcp.y;
+                const outwardProjection = (thumbVecX * ux + thumbVecY * uy) / palmSize;
+
+                const isThumbStraight = (thumbIpAngle > 142) && (thumbMcpAngle > 135);
+                const isThumbSeparated = (tipToIndexMcp > 0.62) && (outwardProjection > 0.22) && (tipToPinkyMcp > mcpToPinkyMcp * 1.12);
+
+                if (isThumbStraight && isThumbSeparated) {
+                    extendedFingers.thumb = true;
+                    count++;
+                }
+
+                // Nota: en video espejado, MediaPipe reporta la lateralidad inversa respecto al usuario
+                const rawLabel = handedness && handedness.label ? handedness.label : 'Right';
+                const handSide = rawLabel === 'Left' ? 'Derecha' : 'Izquierda';
+
+                return { count, extendedFingers, handSide, palmSize };
+            }
+
+            function drawHandSkeleton(ctxOverlay, landmarks, extendedFingers, w, h) {
+                // Dibujar conexiones óseas
+                ctxOverlay.lineWidth = 2.2;
+                ctxOverlay.strokeStyle = 'rgba(255, 255, 255, 0.78)';
+                HAND_CONNECTIONS.forEach(([i, j]) => {
+                    const p1 = landmarks[i];
+                    const p2 = landmarks[j];
+                    ctxOverlay.beginPath();
+                    ctxOverlay.moveTo(p1.x * w, p1.y * h);
+                    ctxOverlay.lineTo(p2.x * w, p2.y * h);
+                    ctxOverlay.stroke();
+                });
+
+                const tipMap = { 4: 'thumb', 8: 'index', 12: 'middle', 16: 'ring', 20: 'pinky' };
+
+                // Dibujar los 21 landmarks con código de color por articulación
+                landmarks.forEach((lm, index) => {
+                    const px = lm.x * w;
+                    const py = lm.y * h;
+
+                    if (index === 0) {
+                        // Muñeca de referencia (landmark 0)
+                        ctxOverlay.beginPath();
+                        ctxOverlay.arc(px, py, 5.5, 0, 2 * Math.PI);
+                        ctxOverlay.fillStyle = '#f59e0b';
+                        ctxOverlay.fill();
+                        ctxOverlay.lineWidth = 1.8;
+                        ctxOverlay.strokeStyle = '#ffffff';
+                        ctxOverlay.stroke();
+                    } else if (tipMap[index] && extendedFingers[tipMap[index]]) {
+                        // Punta de dedo extendido
+                        ctxOverlay.beginPath();
+                        ctxOverlay.arc(px, py, 10, 0, 2 * Math.PI);
+                        ctxOverlay.fillStyle = 'rgba(16, 185, 129, 0.35)';
+                        ctxOverlay.fill();
+
+                        ctxOverlay.beginPath();
+                        ctxOverlay.arc(px, py, 4.8, 0, 2 * Math.PI);
+                        ctxOverlay.fillStyle = '#10b981';
+                        ctxOverlay.fill();
+                        ctxOverlay.lineWidth = 1.8;
+                        ctxOverlay.strokeStyle = '#ffffff';
+                        ctxOverlay.stroke();
+                    } else if (index >= 1 && index <= 4) {
+                        // Articulaciones del pulgar (1..4)
+                        ctxOverlay.beginPath();
+                        ctxOverlay.arc(px, py, 3.8, 0, 2 * Math.PI);
+                        ctxOverlay.fillStyle = '#06b6d4';
+                        ctxOverlay.fill();
+                    } else {
+                        // Resto de articulaciones (MCP, PIP, DIP)
+                        ctxOverlay.beginPath();
+                        ctxOverlay.arc(px, py, 3.8, 0, 2 * Math.PI);
+                        ctxOverlay.fillStyle = '#8b5cf6';
+                        ctxOverlay.fill();
+                    }
+                });
+            }
+
+            function updateDebugHUD({ detected, confirmed, stability, handSide, extendedFingers, handPresent }) {
+                const countEl = document.getElementById('debug-finger-count');
+                const confEl = document.getElementById('debug-confirmed-count');
+                const handEl = document.getElementById('debug-hand-side');
+                const stabEl = document.getElementById('debug-stability');
+                if (!countEl) return;
+
+                if (!handPresent) {
+                    countEl.textContent = '0';
+                    if (confEl) confEl.textContent = 'Confirmado: --';
+                    if (handEl) handEl.textContent = 'Sin mano (0/21)';
+                    if (stabEl) stabEl.textContent = `Estab: 0/${REQUIRED_STABLE_FRAMES}`;
+                    ['thumb', 'index', 'middle', 'ring', 'pinky'].forEach(k => {
+                        const pill = document.getElementById(`pill-${k}`);
+                        if (pill) pill.classList.remove('up');
+                    });
+                    return;
+                }
+
+                countEl.textContent = String(detected);
+                if (confEl) confEl.textContent = `Conf: ${confirmed >= 0 ? confirmed : '--'}`;
+                if (handEl) handEl.textContent = `${handSide} (21 pts)`;
+                if (stabEl) stabEl.textContent = `${Math.min(stability, REQUIRED_STABLE_FRAMES)}/${REQUIRED_STABLE_FRAMES}f`;
+
+                ['thumb', 'index', 'middle', 'ring', 'pinky'].forEach(k => {
+                    const pill = document.getElementById(`pill-${k}`);
+                    if (pill) {
+                        if (extendedFingers && extendedFingers[k]) pill.classList.add('up');
+                        else pill.classList.remove('up');
+                    }
+                });
+            }
+
+            function handleLostDetection() {
+                if (activeGestureIndex !== -1 && gestureActivatedBy === 'camera') {
+                    if (!noDetectionTimer) {
+                        noDetectionTimer = setTimeout(() => {
+                            setGesture(-1, 'camera'); 
+                            noDetectionTimer = null;
+                        }, 1000); 
+                    }
+                }
+            }
+
+            function onHandResults(results) {
+                const canvasOverlay = document.getElementById('webcam-canvas');
+                if (!canvasOverlay || canvasOverlay.clientWidth === 0) return;
+                
+                const ctxOverlay = canvasOverlay.getContext('2d');
+                
+                if (canvasOverlay.width !== canvasOverlay.clientWidth) {
+                    canvasOverlay.width = canvasOverlay.clientWidth;
+                    canvasOverlay.height = canvasOverlay.clientHeight;
+                }
+                
+                ctxOverlay.clearRect(0, 0, canvasOverlay.width, canvasOverlay.height);
+
+                const handsDetected = results.multiHandLandmarks && results.multiHandLandmarks.length > 0;
+                
+                if (handsDetected) {
+                    const landmarks = results.multiHandLandmarks[0];
+                    const handedness = results.multiHandedness[0];
+                    
+                    if (activeGestureIndex === 4) {
+                        const dist = dist2D(landmarks[0], landmarks[9]);
+                        targetHandScale = Math.max(0.4, Math.min(dist / 0.15, 3.5)); 
+                    }
+
+                    const detection = detectFingerCount(landmarks, handedness);
+                    const count = detection.count;
+                    
+                    drawHandSkeleton(ctxOverlay, landmarks, detection.extendedFingers, canvasOverlay.width, canvasOverlay.height);
+                    
+                    if (count === lastDetectedFingers) {
+                        fingerStabilityCount++;
+                        
+                        if (fingerStabilityCount >= REQUIRED_STABLE_FRAMES && stableFingerCount !== count) {
+                            stableFingerCount = count;
+                            
+                            if (count === 0) {
+                                handleLostDetection();
+                            } else if (count >= 1 && count <= 5) {
+                                if (noDetectionTimer) {
+                                    clearTimeout(noDetectionTimer);
+                                    noDetectionTimer = null;
+                                }
+                                
+                                const gestureId = count - 1; 
+                                if (activeGestureIndex !== gestureId) {
+                                    setGesture(gestureId, 'camera');
+                                }
+                            }
+                        }
+                    } else {
+                        lastDetectedFingers = count;
+                        fingerStabilityCount = 1;
+                    }
+
+                    updateDebugHUD({
+                        detected: count,
+                        confirmed: stableFingerCount,
+                        stability: fingerStabilityCount,
+                        handSide: detection.handSide,
+                        extendedFingers: detection.extendedFingers,
+                        handPresent: true
+                    });
+                } else {
+                    handleLostDetection();
+                    lastDetectedFingers = -1;
+                    fingerStabilityCount = 0;
+                    updateDebugHUD({
+                        detected: 0,
+                        confirmed: stableFingerCount,
+                        stability: 0,
+                        handSide: '--',
+                        extendedFingers: null,
+                        handPresent: false
+                    });
+                }
+            }
+
+            async function processVideoFrame() {
+                if (!currentBaseFunction || !mpHands || !activeVideoElement) return;
+                
+                try {
+                    if (activeVideoElement.readyState >= 2) { 
+                        const loader = document.getElementById('camera-loading');
+                        if (loader) loader.style.display = 'none';
+                        
+                        await mpHands.send({ image: activeVideoElement });
+                    }
+                } catch (e) {}
+                
+                trackingAnimationFrame = requestAnimationFrame(processVideoFrame);
+            }
+
+            function startCameraTrackingUI() {
+                if (window.dachtylaCameraStream) {
+                    cameraStatusBadge.classList.add('active');
+                    cameraStatusBadge.innerHTML = '<div class="status-dot"></div>Seguimiento activado';
+                    
+                    cameraBoxContainer.innerHTML = `
+                        <div class="camera-stream-wrapper">
+                            <video id="webcam-video" autoplay playsinline muted></video>
+                            <canvas id="webcam-canvas"></canvas>
+                            <div class="hand-debug-hud">
+                                <div class="debug-top-row">
+                                    <div class="debug-badge">Dedos: <span class="count-num" id="debug-finger-count">0</span> <span style="color:#94a3b8; font-weight:500;" id="debug-confirmed-count">Conf: --</span></div>
+                                    <div class="debug-badge" id="debug-hand-side">Sin mano</div>
+                                </div>
+                                <div class="debug-bottom-row">
+                                    <div class="finger-pills">
+                                        <span class="finger-pill" id="pill-thumb" title="Pulgar">P</span>
+                                        <span class="finger-pill" id="pill-index" title="Índice">I</span>
+                                        <span class="finger-pill" id="pill-middle" title="Medio">M</span>
+                                        <span class="finger-pill" id="pill-ring" title="Anular">A</span>
+                                        <span class="finger-pill" id="pill-pinky" title="Meñique">Me</span>
+                                    </div>
+                                    <span class="stability-tag" id="debug-stability">0/${REQUIRED_STABLE_FRAMES}f</span>
+                                </div>
+                            </div>
+                            <div class="camera-loading" id="camera-loading">Cargando IA...</div>
+                        </div>
+                    `;
+                    activeVideoElement = document.getElementById('webcam-video');
+                    activeVideoElement.srcObject = window.dachtylaCameraStream;
+                    
+                    try {
+                        if (!mpHands && typeof Hands !== 'undefined') {
+                            mpHands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
+                            mpHands.setOptions({
+                                maxNumHands: 1, 
+                                modelComplexity: 1, 
+                                minDetectionConfidence: 0.65, 
+                                minTrackingConfidence: 0.65
+                            });
+                            mpHands.onResults(onHandResults);
+                        }
+                        
+                        if (mpHands) {
+                            trackingAnimationFrame = requestAnimationFrame(processVideoFrame);
+                        }
+                    } catch(e) {}
+                } else {
+                    cameraStatusBadge.classList.remove('active');
+                    cameraStatusBadge.innerHTML = '<div class="status-dot"></div>Seguimiento inactivo';
+                    cameraBoxContainer.innerHTML = cameraErrorStr || "SIN PERMISOS DE CÁMARA";
+                }
+            }
+
+            function launchUI2(selectedFunc) {
+                funcModal.classList.remove('visible');
+
+                currentBaseFunction = selectedFunc;
+                evalA = 0;
+                evalInputValid = true;
+                ui2ActiveFunc.value = selectedFunc.latexExpr;
+                floatBaseFunc.textContent = `f(x) = ${selectedFunc.name}`;
+                
+                try { 
+                    baseCompiled = math.compile(selectedFunc.mathJsExpr || selectedFunc.latexExpr); 
+                    setupDerivatives(selectedFunc.mathJsExpr || selectedFunc.latexExpr);
+                    
+                    const mathRange = calculateMathematicalRange(baseCompiled, selectedFunc.mathJsExpr || selectedFunc.latexExpr);
+                    mathRangeVal.textContent = mathRange;
+                } catch(e) {
+                    mathRangeVal.textContent = "ℝ";
+                }
+                
+                startCameraTrackingUI();
+
+                setGesture(-1, 'manual'); 
+                
+                sidebarUi1.classList.remove('view-active');
+                sidebarUi1.classList.add('view-hidden-left');
+                sidebarUi2.classList.remove('view-hidden-right');
+                sidebarUi2.classList.add('view-active');
+                ui2GestureLabel.style.display = 'block';
+
+                setTimeout(() => { resizeCanvas(); }, 50);
+            }
+
+            btnDeactivateCamera.addEventListener('click', () => {
+                if (window.dachtylaCameraStream) {
+                    window.dachtylaCameraStream.getTracks().forEach(track => track.stop());
+                    window.dachtylaCameraStream = null;
+                }
+                if (trackingAnimationFrame) {
+                    cancelAnimationFrame(trackingAnimationFrame);
+                    trackingAnimationFrame = null;
+                }
+                activeVideoElement = null;
+
+                fingerStabilityCount = 0;
+                stableFingerCount = -1;
+                lastDetectedFingers = -1;
+                
+                if (noDetectionTimer) { clearTimeout(noDetectionTimer); noDetectionTimer = null; }
+
+                cameraStatusBadge.classList.remove('active');
+                cameraStatusBadge.innerHTML = '<div class="status-dot"></div>Seguimiento inactivo';
+                cameraBoxContainer.innerHTML = 'SIN PERMISOS DE CÁMARA';
+
+                sidebarUi2.classList.remove('view-active');
+                sidebarUi2.classList.add('view-hidden-right');
+                sidebarUi1.classList.remove('view-hidden-left');
+                sidebarUi1.classList.add('view-active');
+                ui2GestureLabel.style.display = 'none';
+                
+                graphContainer.classList.remove('dark-mode');
+                setGesture(-1, 'manual');
+
+                currentBaseFunction = null;
+                particlesMap.clear();
+            });
+
+            // =======================================================================
+            // --- MOTOR DE PARTÍCULAS ESTILO MATH PARTICLE HANDS ---
+            // =======================================================================
+            function resizeCanvas() {
+                if (graphContainer.clientWidth > 0 && graphContainer.clientHeight > 0) {
+                    canvas.width = graphContainer.clientWidth;
+                    canvas.height = graphContainer.clientHeight;
+                    updateMathBounds();
+                }
+            }
+
+            function createParticleState(x, targetY, targetOp, isSub) {
+                return {
+                    x: x,
+                    currentX: x + (Math.random() - 0.5) * 1.5,
+                    currentY: targetY + (Math.random() - 0.5) * 1.5,
+                    vx: 0,
+                    vy: 0,
+                    currentOp: 0,
+                    targetY: targetY,
+                    targetOp: targetOp,
+                    isSub: isSub,
+                    phase: Math.random() * Math.PI * 2,
+                    speed: 0.7 + Math.random() * 0.8,
+                    sizeFactor: 0.7 + Math.random() * 0.7
+                };
+            }
+
+            function updateMathBounds() {
+                if (!currentBaseFunction) return;
+                const width = canvas.width;
+                if (width === 0) return;
+
+                const cx = (width / 2) + offsetX;
+                const pixelSpacing = 7;
+                const step = pixelSpacing / scale; 
+                
+                const minX = -cx / scale;
+                const maxX = (width - cx) / scale;
+                
+                const startX = Math.floor(minX / step) * step;
+                const endX = Math.ceil(maxX / step) * step;    
+
+                let newMap = new Map();
+                let prevX = null;
+                let prevY = null;
+
+                for (let x = startX; x <= endX + (step/2); x += step) {
+                    let fixedX = Math.round(x / step) * step;
+                    fixedX = parseFloat(fixedX.toFixed(4));
+                    let targetY = 0, targetOp = 0, isValid = false;
+
+                    if (baseCompiled) {
+                        try {
+                            const y = baseCompiled.evaluate({ x: fixedX });
+                            if (typeof y === 'number' && !isNaN(y) && isFinite(y)) {
+                                targetY = y; targetOp = 1; isValid = true;
+                            }
+                        } catch (e) {}
+                    }
+
+                    if (isValid && prevY !== null) {
+                        const distYPx = Math.abs(targetY - prevY) * scale;
+                        
+                        if (distYPx > pixelSpacing && distYPx < canvas.height * 4) {
+                            let steps = Math.min(120, Math.floor(distYPx / pixelSpacing));
+                            let isInc = targetY > prevY;
+                            
+                            for (let i = 1; i <= steps; i++) {
+                                let ty = prevY + (targetY - prevY) * (i / (steps + 1));
+                                let left = prevX, right = fixedX;
+                                let subX = left;
+                                
+                                for (let iter = 0; iter < 10; iter++) {
+                                    subX = (left + right) / 2;
+                                    try {
+                                        let val = baseCompiled.evaluate({ x: subX });
+                                        if (isInc) {
+                                            if (val < ty) left = subX; else right = subX;
+                                        } else {
+                                            if (val > ty) left = subX; else right = subX;
+                                        }
+                                    } catch(e) { break; }
+                                }
+                                
+                                subX = parseFloat(subX.toFixed(6));
+                                try {
+                                    let subY = baseCompiled.evaluate({ x: subX });
+                                    if (typeof subY === 'number' && !isNaN(subY) && isFinite(subY)) {
+                                        if (Math.abs(subY - ty) < Math.max(1.0, Math.abs(targetY - prevY) * 0.15)) {
+                                            let subExisting = particlesMap.get(subX);
+                                            if (subExisting) {
+                                                subExisting.x = subX;
+                                                subExisting.targetY = subY; 
+                                                subExisting.targetOp = 1;
+                                                subExisting.isSub = true;
+                                                newMap.set(subX, subExisting);
+                                            } else {
+                                                newMap.set(subX, createParticleState(subX, subY, 1, true));
+                                            }
+                                        }
+                                    }
+                                } catch(e) {}
+                            }
+                        }
+                    }
+
+                    let existing = particlesMap.get(fixedX);
+                    if (existing) {
+                        existing.x = fixedX;
+                        existing.targetY = targetY; 
+                        existing.targetOp = targetOp;
+                        existing.isSub = false;
+                        newMap.set(fixedX, existing);
+                    } else {
+                        newMap.set(fixedX, createParticleState(fixedX, targetY, targetOp, false));
+                    }
+
+                    if (isValid) {
+                        prevX = fixedX; prevY = targetY;
+                    } else {
+                        prevX = null; prevY = null;
+                    }
+                }
+                
+                particlesMap = newMap;
+
+                const slider = document.getElementById('slider-a');
+                if (slider) {
+                    slider.min = minX;
+                    slider.max = maxX;
+                }
+                
+                if (activeGestureIndex === 3) {
+                    calculateExtrema();
+                    analyzeMathematicalFeatures();
+                    updateGestureInfoPanel();
+                }
+            }
+
+            function startParticleAnimation() {
+                if (particleAnimationId) cancelAnimationFrame(particleAnimationId);
+                function animate(time) {
+                    // El punto de evaluación y la recta tangente permanecen completamente estáticos en evalA;
+                    // solo cambian cuando el usuario confirma un nuevo x con Enter o mueve el deslizador.
+                    drawGraphScene(time);
+                    particleAnimationId = requestAnimationFrame(animate);
+                }
+                particleAnimationId = requestAnimationFrame(animate);
+            }
+
+            function drawTextWithHalo(text, x, y) {
+                ctx.save();
+                ctx.lineJoin = 'round';
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = 'rgba(5, 5, 8, 0.9)'; 
+                ctx.strokeText(text, x, y);
+                ctx.fillStyle = '#94a3b8'; 
+                ctx.fillText(text, x, y);
+                ctx.restore();
+            }
+
+            function drawGridAndAxes() {
+                if (canvas.width === 0 || canvas.height === 0) return;
+                const width = canvas.width, height = canvas.height;
+                const cx = (width / 2) + offsetX, cy = (height / 2) + offsetY;
+
+                const minXVal = Math.floor(Math.min(-cx / scale, (width - cx) / scale));
+                const maxXVal = Math.ceil(Math.max(-cx / scale, (width - cx) / scale));
+                const minYVal = Math.floor(Math.min((cy - height) / scale, cy / scale));
+                const maxYVal = Math.ceil(Math.max((cy - height) / scale, cy / scale));
+
+                ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)'; 
+                for (let i = minXVal; i <= maxXVal; i++) {
+                    if (i === 0) continue;
+                    const px = cx + (i * scale);
+                    if (px >= 0 && px <= width) { ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, height); ctx.stroke(); }
+                }
+                for (let j = minYVal; j <= maxYVal; j++) {
+                    if (j === 0) continue;
+                    const py = cy - (j * scale);
+                    if (py >= 0 && py <= height) { ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(width, py); ctx.stroke(); }
+                }
+
+                ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
+                if (cy >= 0 && cy <= height) { ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(width, cy); ctx.stroke(); }
+                if (cx >= 0 && cx <= width) { ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, height); ctx.stroke(); }
+
+                ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+                if (width - 30 >= 0 && width - 30 <= width) {
+                    ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+                    drawTextWithHalo('x', width - 15, Math.max(20, Math.min(height - 20, cy)) - 6);
+                }
+                const labelCx = Math.max(35, Math.min(width - 35, cx));
+                if (labelCx >= 10 && labelCx <= width - 10 && 20 <= height) {
+                    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+                    drawTextWithHalo('y', labelCx + 10, 15);
+                }
+
+                ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+                ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+                const clampedTickY = Math.max(10, Math.min(height - 20, cy));
+                
+                for (let i = minXVal; i <= maxXVal; i++) {
+                    if (i === 0) continue; 
+                    const px = cx + (i * scale);
+                    if (px >= 15 && px <= width - 15) {
+                        ctx.beginPath();
+                        ctx.moveTo(px, clampedTickY - 3);
+                        ctx.lineTo(px, clampedTickY + 3);
+                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+                        ctx.lineWidth = 1;
+                        ctx.stroke();
+                        drawTextWithHalo(i.toString(), px, clampedTickY + 6);
+                    }
+                }
+
+                ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+                const clampedTickX = Math.max(30, Math.min(width - 20, cx));
+                
+                for (let j = minYVal; j <= maxYVal; j++) {
+                    if (j === 0) continue; 
+                    const py = cy - (j * scale);
+                    if (py >= 15 && py <= height - 15) {
+                        ctx.beginPath();
+                        ctx.moveTo(clampedTickX - 3, py);
+                        ctx.lineTo(clampedTickX + 3, py);
+                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+                        ctx.lineWidth = 1;
+                        ctx.stroke();
+                        drawTextWithHalo(j.toString(), clampedTickX - 8, py);
+                    }
+                }
+                
+                if (cx >= 15 && cx <= width - 15 && cy >= 15 && cy <= height - 15) {
+                    ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+                    drawTextWithHalo('0', cx - 6, cy + 6);
+                }
+            }
+
+            // Helper para renderizar una partícula luminosa
+            function renderGlowingDot(px, py, radius, r, g, b, alpha) {
+                ctx.beginPath();
+                ctx.arc(px, py, radius * 2.4, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha * 0.22})`;
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.arc(px, py, radius, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha * 0.85})`;
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.arc(px, py, radius * 0.45, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.95})`;
+                ctx.fill();
+            }
+
+            function drawBaseCurveParticles(time) {
+                const width = canvas.width, height = canvas.height;
+                const cx = (width / 2) + offsetX, cy = (height / 2) + offsetY;
+                const t = time * 0.0022;
+                const spring = 0.09;
+                const friction = 0.78;
+
+                ctx.save();
+                ctx.globalCompositeOperation = 'lighter';
+
+                for (let [fixedX, p] of particlesMap.entries()) {
+                    const ax = (p.x - p.currentX) * spring;
+                    const ay = (p.targetY - p.currentY) * spring;
+                    p.vx = (p.vx + ax) * friction;
+                    p.vy = (p.vy + ay) * friction;
+                    p.currentX += p.vx;
+                    p.currentY += p.vy;
+
+                    p.currentOp += (p.targetOp - p.currentOp) * 0.14;
+                    if (p.currentOp < 0.01) continue;
+
+                    const driftX = Math.cos(t * p.speed + p.phase) * 2.4;
+                    const driftY = Math.sin(t * p.speed * 1.15 + p.phase) * 2.4;
+
+                    const px = cx + (p.currentX * scale) + driftX;
+                    const py = cy - (p.currentY * scale) + driftY; 
+                    
+                    if (py < -50 || py > height + 50 || px < -50 || px > width + 50) continue;
+
+                    const pulse = Math.sin(p.x * 3.5 + t + p.phase) * 0.5 + 0.5;
+                    const r = (1.6 + pulse * 1.3) * p.sizeFactor;
+                    const opacity = (0.55 + pulse * 0.45) * p.currentOp;
+
+                    const cMix = Math.sin(p.x * 0.6 + t * 0.5) * 0.5 + 0.5;
+                    const cr = Math.round(120 + cMix * 116);
+                    const cg = Math.round(92 + (1 - cMix) * 110);
+                    const cb = 246;
+
+                    renderGlowingDot(px, py, r, cr, cg, cb, opacity);
+                }
+
+                ctx.restore();
+            }
+
+            function drawDerivativeParticles(compiledFunc, colorRgb, time) {
+                if(!compiledFunc) return;
+                const width = canvas.width, height = canvas.height;
+                const cx = (width / 2) + offsetX, cy = (height / 2) + offsetY;
+                const minX = -cx / scale, maxX = (width - cx) / scale;
+                
+                const pixelSpacing = 8; 
+                const step = pixelSpacing / scale;
+                const startX = Math.floor(minX / step) * step;
+
+                const t = time * 0.0024;
+                const [cr, cg, cb] = colorRgb.split(',').map(v => parseInt(v.trim()));
+                let prevX = null, prevY = null;
+
+                ctx.save();
+                ctx.globalCompositeOperation = 'lighter';
+
+                for(let x = startX; x <= maxX + step; x += step) {
+                    try {
+                        let y = compiledFunc.evaluate({x});
+                        if (typeof y === 'number' && !isNaN(y) && isFinite(y)) {
+                            const driftX = Math.cos(t + x * 4) * 2.0;
+                            const driftY = Math.sin(t * 1.2 + x * 4) * 2.0;
+                            const px = cx + x * scale + driftX;
+                            const py = cy - y * scale + driftY;
+
+                            if (prevX !== null && prevY !== null) {
+                                const distYPx = Math.abs(y - prevY) * scale;
+                                if (distYPx > pixelSpacing && distYPx < height * 4) {
+                                    let steps = Math.min(100, Math.floor(distYPx / pixelSpacing));
+                                    let isInc = y > prevY;
+                                    
+                                    for (let i = 1; i <= steps; i++) {
+                                        let ty = prevY + (y - prevY) * (i / (steps + 1));
+                                        let left = prevX, right = x;
+                                        let subX = left;
+                                        
+                                        for (let iter = 0; iter < 10; iter++) {
+                                            subX = (left + right) / 2;
+                                            try {
+                                                let val = compiledFunc.evaluate({x: subX});
+                                                if (isInc) {
+                                                    if (val < ty) left = subX; else right = subX;
+                                                } else {
+                                                    if (val > ty) left = subX; else right = subX;
+                                                }
+                                            } catch(e) { break; }
+                                        }
+                                        
+                                        try {
+                                            let subY = compiledFunc.evaluate({x: subX});
+                                            if (typeof subY === 'number' && !isNaN(subY) && isFinite(subY)) {
+                                                if (Math.abs(subY - ty) < Math.max(0.5, Math.abs(y - prevY) * 0.15)) {
+                                                    const subPx = cx + subX * scale + Math.cos(t + subX * 4) * 2.0;
+                                                    const subPy = cy - subY * scale + Math.sin(t * 1.2 + subX * 4) * 2.0;
+                                                    if (subPy >= -50 && subPy <= height + 50) {
+                                                        const pulse = Math.sin(subX * 5 + t) * 0.5 + 0.5;
+                                                        renderGlowingDot(subPx, subPy, 1.5 + pulse * 1.1, cr, cg, cb, 0.55 + pulse * 0.4);
+                                                    }
+                                                }
+                                            }
+                                        } catch(e) {}
+                                    }
+                                }
+                            }
+
+                            if (py >= -50 && py <= height + 50) {
+                                const pulse = Math.sin(x * 5 + t) * 0.5 + 0.5;
+                                renderGlowingDot(px, py, 1.5 + pulse * 1.1, cr, cg, cb, 0.55 + pulse * 0.4);
+                            }
+
+                            prevX = x; prevY = y;
+                        } else {
+                            prevX = null; prevY = null;
+                        }
+                    } catch(e) {
+                        prevX = null; prevY = null;
+                    }
+                }
+
+                ctx.restore();
+            }
+
+            function draw3DRotation(time) {
+                const width = canvas.width, height = canvas.height;
+                const cx = (width / 2) + offsetX;
+                const cy = (height / 2) + offsetY;
+
+                const t = time * 0.0012;
+                const numAngles = 42; 
+                const fov = 700; 
+
+                const pitch = 0.35; 
+                const cosP = Math.cos(pitch);
+                const sinP = Math.sin(pitch);
+
+                currentHandScale += (targetHandScale - currentHandScale) * 0.08;
+
+                let pointsToDraw = [];
+
+                for (let a = 0; a < numAngles; a++) {
+                    const angleRatio = a / numAngles;
+                    const theta = t + (angleRatio * Math.PI * 2);
+                    const cosT = Math.cos(theta);
+                    const sinT = Math.sin(theta);
+
+                    for (let [fixedX, p] of particlesMap.entries()) {
+                        if (p.isSub) continue; 
+                        if (p.targetOp < 0.1) continue;
+
+                        p.currentX += (p.x - p.currentX) * 0.15;
+                        p.currentY += (p.targetY - p.currentY) * 0.15;
+
+                        const px = p.currentX * scale * currentHandScale;
+                        const py = p.currentY * scale * currentHandScale;
+
+                        const rotX = px * cosT;
+                        const rotZ = px * sinT;
+                        const rotY = py;
+
+                        const finalX = rotX;
+                        const finalY = rotY * cosP - rotZ * sinP;
+                        const finalZ = rotY * sinP + rotZ * cosP;
+
+                        pointsToDraw.push({ 
+                            x: finalX, 
+                            y: finalY, 
+                            z: finalZ, 
+                            baseR: 1.5,
+                            hueMix: Math.sin(theta + p.x * 0.5) * 0.5 + 0.5
+                        });
+                    }
+                }
+
+                pointsToDraw.sort((a, b) => b.z - a.z);
+
+                ctx.save();
+                ctx.globalCompositeOperation = 'lighter';
+
+                for (let pt of pointsToDraw) {
+                    const zFactor = fov / (fov + pt.z);
+                    if (zFactor < 0) continue; 
+
+                    const projX = cx + pt.x * zFactor;
+                    const projY = cy - pt.y * zFactor; 
+
+                    const depthAlpha = Math.max(0.08, Math.min(0.85, 1 - (pt.z / (scale * 8 * currentHandScale))));
+                    const r = Math.max(0.6, pt.baseR * zFactor * Math.max(0.7, currentHandScale));
+
+                    const cr = Math.round(110 + pt.hueMix * 126);
+                    const cg = Math.round(92 + (1 - pt.hueMix) * 115);
+                    const cb = 246;
+
+                    ctx.beginPath();
+                    ctx.arc(projX, projY, r * 2.0, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(${cr}, ${cg}, ${cb}, ${depthAlpha * 0.25})`;
+                    ctx.fill();
+
+                    ctx.beginPath();
+                    ctx.arc(projX, projY, r, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(${cr}, ${cg}, ${cb}, ${depthAlpha})`;
+                    ctx.fill();
+                }
+
+                ctx.restore();
+            }
+
+            function drawGraphScene(time) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                if (activeGestureIndex !== 4) {
+                    drawGridAndAxes();
+                }
+
+                if (!currentBaseFunction || canvas.width === 0) return;
+                
+                const cx = (canvas.width / 2) + offsetX, cy = (canvas.height / 2) + offsetY;
+                const exprStr = currentBaseFunction.mathJsExpr || currentBaseFunction.latexExpr;
+
+                if (activeGestureIndex === 4) {
+                    draw3DRotation(time); 
+                } else {
+                    drawBaseCurveParticles(time);
+                    
+                    if (activeGestureIndex === 0 && baseCompiled && evalInputValid) {
+                        const res = evaluateFunctionAtPoint(exprStr, baseCompiled, evalA);
+                        if (res.status === 'ok') {
+                            const px = cx + evalA * scale;
+                            const py = cy - res.y * scale;
+                            
+                            ctx.beginPath(); ctx.setLineDash([5, 5]); ctx.moveTo(px, cy); ctx.lineTo(px, py);
+                            ctx.moveTo(cx, py); ctx.lineTo(px, py); ctx.strokeStyle = '#a78bfa'; ctx.lineWidth = 1.5; ctx.stroke(); ctx.setLineDash([]);
+                            
+                            ctx.save();
+                            ctx.globalCompositeOperation = 'lighter';
+                            renderGlowingDot(px, py, 5.5, 236, 72, 153, 1);
+                            ctx.restore();
+                        }
+                    }
+                    else if (activeGestureIndex === 1 && baseCompiled && evalInputValid) {
+                        const tanRes = evaluateTangentAtPoint(exprStr, baseCompiled, deriv1Str, d1Compiled, evalA);
+                        if (tanRes.status === 'ok') {
+                            const fa = tanRes.y;
+                            const m = tanRes.m;
+                            const px = cx + evalA * scale;
+                            const py = cy - fa * scale;
+                            
+                            const minX = -cx / scale; const maxX = (canvas.width - cx) / scale;
+                            const y1 = m * (minX - evalA) + fa;
+                            const y2 = m * (maxX - evalA) + fa;
+                            
+                            ctx.beginPath();
+                            ctx.moveTo(cx + minX * scale, cy - y1 * scale);
+                            ctx.lineTo(cx + maxX * scale, cy - y2 * scale);
+                            ctx.strokeStyle = '#10b981'; ctx.lineWidth = 2.5; ctx.stroke();
+                            
+                            ctx.save();
+                            ctx.globalCompositeOperation = 'lighter';
+                            renderGlowingDot(px, py, 5, 16, 185, 129, 1);
+                            ctx.restore();
+                        } else if (tanRes.funcResult && tanRes.funcResult.status === 'ok') {
+                            // Si el punto existe pero la derivada no existe (ej. pico o tangente vertical), marcar el punto sin trazar tangente
+                            const px = cx + evalA * scale;
+                            const py = cy - tanRes.funcResult.y * scale;
+                            ctx.save();
+                            ctx.globalCompositeOperation = 'lighter';
+                            renderGlowingDot(px, py, 5, 245, 158, 11, 1);
+                            ctx.restore();
+                        }
+                    }
+                    else if (activeGestureIndex === 2) {
+                        drawDerivativeParticles(d1Compiled, '239, 68, 68', time);
+                        drawDerivativeParticles(d2Compiled, '59, 130, 246', time);
+                    }
+                    else if (activeGestureIndex === 3) {
+                        extremaPoints.forEach(p => {
+                            const px = cx + p.x * scale;
+                            const py = cy - p.y * scale;
+                            ctx.save();
+                            ctx.globalCompositeOperation = 'lighter';
+                            if (p.type === 'Máximo') {
+                                renderGlowingDot(px, py, 5, 16, 185, 129, 1);
+                            } else {
+                                renderGlowingDot(px, py, 5, 245, 158, 11, 1);
+                            }
+                            ctx.restore();
+                        });
+
+                        asymptotes.forEach(ax => {
+                            const px = cx + ax * scale;
+                            if (px >= -10 && px <= canvas.width + 10) {
+                                ctx.beginPath();
+                                ctx.moveTo(px, 0);
+                                ctx.lineTo(px, canvas.height);
+                                ctx.strokeStyle = '#ef4444';
+                                ctx.lineWidth = 3.5;
+                                ctx.stroke();
+                            }
+                        });
+
+                        holes.forEach(hole => {
+                            const px = cx + hole.x * scale;
+                            const py = cy - hole.y * scale;
+                            if (px >= -10 && px <= canvas.width + 10 && py >= -10 && py <= canvas.height + 10) {
+                                ctx.beginPath(); 
+                                ctx.arc(px, py, 5, 0, Math.PI*2);
+                                ctx.fillStyle = '#050508'; 
+                                ctx.fill();
+                                ctx.strokeStyle = '#f59e0b'; 
+                                ctx.lineWidth = 2;
+                                ctx.stroke();
+                            }
+                        });
+                    }
+                }
+            }
+
+            resizeCanvas();
+            startParticleAnimation();
+
+            // --- HERRAMIENTAS Y CALCULADORA (MANTENIDAS) ---
+            const btnTools = document.getElementById('btn-tools');
+            const toolsPopover = document.getElementById('tools-popover');
+            const closeTools = document.getElementById('close-tools');
+            const calcPopover = document.getElementById('calc-popover');
+            const closeCalc = document.getElementById('close-calc');
+            const btnKeyboard = document.getElementById('btn-keyboard');
+            
+            btnTools.addEventListener('click', (e) => { e.stopPropagation(); calcPopover.classList.remove('visible'); btnKeyboard.classList.remove('active'); toolsPopover.classList.toggle('visible'); btnTools.classList.toggle('active'); });
+            btnKeyboard.addEventListener('click', (e) => { e.stopPropagation(); toolsPopover.classList.remove('visible'); btnTools.classList.remove('active'); calcPopover.classList.toggle('visible'); btnKeyboard.classList.toggle('active'); });
+            closeTools.addEventListener('click', () => { toolsPopover.classList.remove('visible'); btnTools.classList.remove('active'); });
+            closeCalc.addEventListener('click', () => { calcPopover.classList.remove('visible'); btnKeyboard.classList.remove('active'); });
+            document.addEventListener('click', (e) => {
+                if (!toolsPopover.contains(e.target) && !btnTools.contains(e.target)) { toolsPopover.classList.remove('visible'); btnTools.classList.remove('active'); }
+                if (!calcPopover.contains(e.target) && !btnKeyboard.contains(e.target)) { calcPopover.classList.remove('visible'); btnKeyboard.classList.remove('active'); }
+            });
+            document.querySelectorAll('[data-tool]').forEach(btn => {
+                btn.addEventListener('mousedown', (e) => e.preventDefault());
+                btn.addEventListener('click', async (e) => { const cmd = e.target.getAttribute('data-tool'); mf.focus(); if (cmd === 'pasteFromClipboard') { try { const text = await navigator.clipboard.readText(); mf.insert(text); } catch (err) { mf.executeCommand(cmd); } } else { mf.executeCommand(cmd); } });
+            });
+            document.getElementById('tool-color').addEventListener('input', (e) => { mf.focus(); mf.applyStyle({ color: e.target.value }); });
+            document.getElementById('tool-bg').addEventListener('input', (e) => { mf.focus(); mf.applyStyle({ backgroundColor: e.target.value }); });
+            document.getElementById('tool-font').addEventListener('mousedown', (e) => e.preventDefault());
+            document.getElementById('tool-font').addEventListener('click', () => { mf.focus(); mf.executeCommand(['toggleStyle', 'italic']); });
+            const btnMode = document.getElementById('tool-mode');
+            btnMode.addEventListener('mousedown', (e) => e.preventDefault());
+            btnMode.addEventListener('click', () => { mf.focus(); const newMode = mf.mode === 'math' ? 'text' : 'math'; mf.executeCommand(['switchMode', newMode]); btnMode.textContent = `Modo: ${newMode === 'math' ? 'Matemática' : 'Texto'}`; });
+            const calcTabs = document.querySelectorAll('.calc-tab');
+            const calcGrids = document.querySelectorAll('.calc-grid');
+            calcTabs.forEach(tab => { tab.addEventListener('click', () => { calcTabs.forEach(t => t.classList.remove('active')); calcGrids.forEach(g => g.classList.remove('active')); tab.classList.add('active'); document.getElementById(tab.getAttribute('data-tab')).classList.add('active'); }); });
+            document.querySelectorAll('.calc-btn').forEach(btn => {
+                btn.addEventListener('mousedown', (e) => e.preventDefault());
+                btn.addEventListener('click', (e) => { mf.focus(); const insertStr = btn.getAttribute('data-insert'); const cmd = btn.getAttribute('data-cmd'); if (insertStr) { mf.insert(insertStr); } else if (cmd) { if (cmd === 'enter') btnSave.click(); else if (cmd === 'deleteAll') mf.value = ''; else mf.executeCommand(cmd); } });
+            });
+        });
+    </script>
+</body>
+</html>
